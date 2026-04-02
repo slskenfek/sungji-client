@@ -91,20 +91,40 @@
     ];
 
     variants.forEach((variant, index) => {
-      const graphics = scene.make.graphics({ x: 0, y: 0, add: false });
-      graphics.fillStyle(variant.skin, 1);
-      graphics.fillCircle(20, 18, 12);
-      graphics.fillRoundedRect(10, 25, 20, 15, 6);
-      graphics.fillStyle(variant.accent, 1);
-      graphics.fillRect(14, 15, 4, 4);
-      graphics.fillRect(22, 15, 4, 4);
-      graphics.fillStyle(0x2d1010, 1);
-      graphics.fillRect(17, 25, 6, 2);
-      graphics.fillRect(10, 39, 6, 6);
-      graphics.fillRect(24, 39, 6, 6);
-      graphics.generateTexture(`monster-${index}`, 40, 46);
-      graphics.destroy();
+      ["idle", "move-a", "move-b", "attack"].forEach((pose) => {
+        const graphics = scene.make.graphics({ x: 0, y: 0, add: false });
+        drawMonsterTexture(graphics, variant, pose);
+        graphics.generateTexture(`monster-${index}-${pose}`, 40, 46);
+        graphics.destroy();
+      });
     });
+  }
+
+  function drawMonsterTexture(graphics, variant, pose) {
+    const legOffset = pose === "move-a" ? -2 : pose === "move-b" ? 2 : 0;
+    const armOffset = pose === "attack" ? 4 : pose === "move-a" ? 2 : 0;
+    const eyeY = pose === "attack" ? 14 : 15;
+    const mouthY = pose === "attack" ? 24 : 25;
+
+    graphics.fillStyle(variant.skin, 1);
+    graphics.fillCircle(20, 18, 12);
+    graphics.fillRoundedRect(10, 25, 20, 15, 6);
+    graphics.fillStyle(variant.accent, 1);
+    graphics.fillRect(14, eyeY, 4, 4);
+    graphics.fillRect(22, eyeY, 4, 4);
+    graphics.fillStyle(0x2d1010, 1);
+    graphics.fillRect(17, mouthY, 6, 2);
+    graphics.fillRect(10 + legOffset, 39, 6, 6);
+    graphics.fillRect(24 - legOffset, 39, 6, 6);
+
+    graphics.fillStyle(variant.accent, 1);
+    graphics.fillRect(6 + armOffset, 27, 4, 8);
+    graphics.fillRect(30, 27, 4, 8);
+
+    if (pose === "attack") {
+      graphics.fillStyle(0xffd8b0, 1);
+      graphics.fillCircle(6, 22, 4);
+    }
   }
 
   function createEffectTextures(scene) {

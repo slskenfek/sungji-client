@@ -17,8 +17,19 @@
         maxMp: config.player.maxMp,
         xp: 0,
         xpToNext: leveling.getXpToNext(1),
-        level: 1,
+        level: 0,
+        strength: config.player.strength,
+        dexterity: config.player.dexterity,
+        knowledge: config.player.knowledge,
+        defense: config.player.defense,
+        attackRateStage: config.player.baseAttackRateStage,
+        attackSpeed: config.player.baseAttackRateStage,
+        damage: config.player.baseDamage,
+        magicDamage: config.player.knowledge * 10,
+        levelDamageBonus: 0,
+        levelDefenseBonus: 0,
       };
+      this.recalculatePlayerStats();
     }
 
     preload() {
@@ -73,6 +84,15 @@
       this.player.setSize(28, 36);
       this.player.setOffset(18, 20);
       this.player.setDepth(20);
+
+      this.playerLevelText = this.add.text(this.player.x, this.player.y - 52, "LV:0", {
+        fontFamily: "Segoe UI",
+        fontSize: "12px",
+        color: "#fff0b5",
+        fontStyle: "700",
+        stroke: "#081015",
+        strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(32);
     }
 
     createGroups() {
@@ -107,6 +127,22 @@
           repeat: -1,
         });
       }
+
+      for (let index = 0; index < 3; index += 1) {
+        if (!this.anims.exists(`monster-${index}-run`)) {
+          this.anims.create({
+            key: `monster-${index}-run`,
+            frames: [
+              { key: `monster-${index}-move-a` },
+              { key: `monster-${index}-idle` },
+              { key: `monster-${index}-move-b` },
+              { key: `monster-${index}-idle` },
+            ],
+            frameRate: 7,
+            repeat: -1,
+          });
+        }
+      }
     }
 
     createUi() {
@@ -132,6 +168,25 @@
       hudSystem.refreshHud(this, this.hud);
     }
 
+    recalculatePlayerStats() {
+      const strengthDelta = this.playerState.strength - config.player.strength;
+      const dexterityDelta = this.playerState.dexterity - config.player.dexterity;
+      const knowledgeDelta = this.playerState.knowledge - config.player.knowledge;
+
+      this.playerState.attackRateStage = Number(
+        (config.player.baseAttackRateStage + dexterityDelta * 0.2).toFixed(2)
+      );
+      this.playerState.attackSpeed = this.playerState.attackRateStage;
+      this.playerState.damage = Number(
+        (config.player.baseDamage + this.playerState.levelDamageBonus + strengthDelta * 0.5).toFixed(2)
+      );
+      this.playerState.defense = Number(
+        (config.player.defense + this.playerState.levelDefenseBonus + dexterityDelta * 0.5).toFixed(2)
+      );
+      this.playerState.maxHp = config.player.maxHp + strengthDelta * 7;
+      this.playerState.magicDamage = knowledgeDelta >= 0 ? (config.player.knowledge + knowledgeDelta) * 10 : 0;
+    }
+
     spawnMonster() {
       if (this.monsters.getChildren().length >= config.monsters.maxAlive) {
         return;
@@ -143,21 +198,20 @@
       const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 100, config.world.height - 100);
       const monsterLevel = leveling.getMonsterLevel(this.playerState.level, config.room.minMonsterLevel);
 
-      const monster = this.physics.add.sprite(
-        spawnX,
-        spawnY,
-        `monster-${Phaser.Math.Between(0, 2)}`
-      );
+      const variant = Phaser.Math.Between(0, 2);
+      const monster = this.physics.add.sprite(spawnX, spawnY, `monster-${variant}-idle`);
       monster.setDepth(18);
+      monster.setData("variant", variant);
       monster.setData("level", monsterLevel);
-      monster.setData("hp", monsterLevel * 2);
-      monster.setData("maxHp", monsterLevel * 2);
+      monster.setData("defenseMultiplier", leveling.getMonsterDefenseMultiplier(monsterLevel));
+      monster.setData("hp", 1);
+      monster.setData("maxHp", 1);
       monster.setData("speed", Phaser.Math.Between(config.monsters.speedMin, config.monsters.speedMax));
       monster.setData("attackRange", Phaser.Math.Between(config.monsters.attackRangeMin, config.monsters.attackRangeMax));
       monster.setData("nextShotAt", this.time.now + Phaser.Math.Between(config.monsters.attackIntervalMin, config.monsters.attackIntervalMax));
 
       const hpBar = this.add.graphics().setDepth(30);
-      const levelText = this.add.text(monster.x, monster.y - 44, `Lv.${monsterLevel}`, {
+      const levelText = this.add.text(monster.x, monster.y - 44, `LV:${monsterLevel}`, {
         fontFamily: "Segoe UI",
         fontSize: "11px",
         color: "#f4e5b5",
@@ -220,11 +274,7 @@
         const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, monster.x, monster.y);
         const desiredRange = monster.getData("attackRange");
 
-        if (distance > desiredRange) {
-          this.physics.moveToObject(monster, this.player, monster.getData("speed"));
-        } else {
-          monster.setVelocity(0, 0);
-        }
+        this.physics.moveToObject(monster, this.player, monster.getData("speed"));
 
         if (monster.body.velocity.x < 0) {
           monster.setFlipX(true);
@@ -240,8 +290,28 @@
           );
         }
 
+        this.updateMonsterAnimation(monster, time);
+
         this.drawMonsterHud(monster);
       });
+    }
+
+    updateMonsterAnimation(monster, time) {
+      const moving = monster.body.velocity.length() > 4;
+      const attackLockedUntil = monster.getData("attackLockedUntil") || 0;
+
+      if (time < attackLockedUntil) {
+        monster.anims.stop();
+        monster.setTexture(`monster-${monster.getData("variant")}-attack`);
+        return;
+      }
+
+      if (moving) {
+        monster.anims.play(`monster-${monster.getData("variant")}-run`, true);
+      } else {
+        monster.anims.stop();
+        monster.setTexture(`monster-${monster.getData("variant")}-idle`);
+      }
     }
 
     drawMonsterHud(monster) {
@@ -260,13 +330,32 @@
       levelText.setPosition(monster.x, monster.y - 44);
     }
 
+    drawPlayerHud() {
+      if (!this.playerLevelText?.active) {
+        return;
+      }
+
+      this.playerLevelText.setText(`LV:${this.playerState.level}`);
+      this.playerLevelText.setPosition(this.player.x, this.player.y - 52);
+    }
+
     fireMonsterProjectile(monster) {
       const projectile = this.physics.add.image(monster.x, monster.y - 4, "enemy-shot");
       projectile.setDepth(24);
       projectile.setData("damage", config.monsters.projectileDamage + monster.getData("level") * 2);
       projectile.setData("spawnedAt", this.time.now);
+      projectile.setData("speed", config.monsters.projectileSpeed);
+      monster.setData("attackLockedUntil", this.time.now + 180);
       this.physics.moveToObject(projectile, this.player, config.monsters.projectileSpeed);
       this.enemyProjectiles.add(projectile);
+
+      this.tweens.add({
+        targets: monster,
+        scaleX: 1.08,
+        scaleY: 0.92,
+        yoyo: true,
+        duration: 90,
+      });
     }
 
     handleProjectileHit(player, projectile) {
@@ -274,7 +363,9 @@
         return;
       }
 
-      this.playerState.hp = Math.max(0, this.playerState.hp - projectile.getData("damage"));
+      const incomingDamage = projectile.getData("damage");
+      const reducedDamage = Math.max(1, incomingDamage - this.playerState.defense);
+      this.playerState.hp = Math.max(0, this.playerState.hp - reducedDamage);
       projectile.destroy();
       this.refreshUi();
     }
@@ -289,11 +380,11 @@
         return;
       }
 
-      this.attackCooldown = time + config.player.attackCooldownByTier[config.player.attackRateTier - 1];
+      this.attackCooldown = time + Math.max(120, config.player.attackCooldownBase / this.playerState.attackRateStage);
       this.playerAttackLockedUntil = time + 140;
 
       this.playMeleeAttack(target);
-      this.damageMonster(target, 1);
+      this.damageMonster(target, this.playerState.damage);
     }
 
     findNearestMonster() {
@@ -357,7 +448,9 @@
         return;
       }
 
-      const nextHp = Math.max(0, monster.getData("hp") - amount);
+      const defenseMultiplier = monster.getData("defenseMultiplier") || 1;
+      const mitigatedDamage = Math.max(0.1, amount / defenseMultiplier);
+      const nextHp = Math.max(0, monster.getData("hp") - mitigatedDamage);
       monster.setData("hp", nextHp);
       this.drawMonsterHud(monster);
 
@@ -384,14 +477,73 @@
       while (this.playerState.xp >= this.playerState.xpToNext) {
         this.playerState.xp -= this.playerState.xpToNext;
         this.playerState.level += 1;
-        this.playerState.maxHp += 20;
-        this.playerState.maxMp += 8;
+        this.playerState.strength += 2;
+        this.playerState.levelDamageBonus += 1;
+        this.playerState.levelDefenseBonus += 1;
+        if (this.playerState.level % 3 === 0) {
+          this.playerState.dexterity += 1;
+          this.playerState.knowledge += 1;
+        }
         this.playerState.hp = this.playerState.maxHp;
         this.playerState.mp = this.playerState.maxMp;
-        this.playerState.xpToNext = leveling.getXpToNext(this.playerState.level);
+        this.recalculatePlayerStats();
+        this.playerState.hp = this.playerState.maxHp;
+        this.playerState.xpToNext = leveling.getXpToNext(this.playerState.level + 1);
+        this.playLevelUpEffect(this.playerState.level);
       }
 
       this.refreshUi();
+    }
+
+    playLevelUpEffect(level) {
+      const flash = this.add.circle(this.player.x, this.player.y, 24, 0xfff1ab, 0.55).setDepth(40);
+      const ring = this.add.circle(this.player.x, this.player.y, 18).setDepth(41);
+      ring.setStrokeStyle(5, 0xf7c95c, 1);
+      const levelText = this.add.text(this.player.x, this.player.y - 64, `LEVEL ${level}!`, {
+        fontFamily: "Segoe UI",
+        fontSize: "24px",
+        color: "#fff4c3",
+        fontStyle: "700",
+        stroke: "#7a4c15",
+        strokeThickness: 5,
+      }).setOrigin(0.5).setDepth(42);
+
+      this.tweens.add({
+        targets: flash,
+        scaleX: 3,
+        scaleY: 3,
+        alpha: 0,
+        duration: 280,
+        onComplete: () => flash.destroy(),
+      });
+
+      this.tweens.add({
+        targets: ring,
+        scaleX: 4.2,
+        scaleY: 4.2,
+        alpha: 0,
+        duration: 420,
+        onComplete: () => ring.destroy(),
+      });
+
+      this.tweens.add({
+        targets: levelText,
+        y: this.player.y - 112,
+        alpha: 0,
+        duration: 760,
+        ease: "Cubic.easeOut",
+        onComplete: () => levelText.destroy(),
+      });
+    }
+
+    updateProjectiles() {
+      this.enemyProjectiles.getChildren().forEach((projectile) => {
+        if (!projectile.active) {
+          return;
+        }
+
+        this.physics.moveToObject(projectile, this.player, projectile.getData("speed"));
+      });
     }
 
     cleanupProjectiles() {
@@ -417,7 +569,9 @@
       this.updatePlayerMovement(time);
       this.updateMonsters(time);
       this.handleAutoAttack(time);
+      this.updateProjectiles();
       this.cleanupProjectiles();
+      this.drawPlayerHud();
     }
   }
 

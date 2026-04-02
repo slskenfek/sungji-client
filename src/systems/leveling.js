@@ -12,12 +12,17 @@
   }
 
   function getMonsterXpReward(level) {
-    return config.progression.xpRewardBase + level * 4;
+    return Math.round(config.progression.xpRewardBase * Math.pow(1.2, Math.max(0, level - 1)));
+  }
+
+  function getMonsterDefenseMultiplier(level) {
+    return 1 + Math.max(0, level - 1) * 0.5;
   }
 
   global.DungeonLeveling = {
     getXpToNext,
     getMonsterLevel,
     getMonsterXpReward,
+    getMonsterDefenseMultiplier,
   };
 })(window);
