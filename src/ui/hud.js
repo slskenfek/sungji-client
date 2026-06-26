@@ -5,102 +5,130 @@
     // Scene이 들고 있을 UI 오브젝트 묶음.
     const hud = {};
     // ScrollFactor 0은 카메라 이동과 무관하게 화면에 고정된다는 뜻이다.
-    hud.container = scene.add.container(18, 18).setScrollFactor(0).setDepth(1000);
+    hud.container = scene.add.container(24, 24).setScrollFactor(0).setDepth(1000);
 
     // 좌측 상태 패널 배경.
     hud.panel = scene.add.graphics();
-    hud.panel.fillStyle(0x081015, 0.9);
-    hud.panel.lineStyle(1, 0x365261, 0.95);
-    hud.panel.fillRoundedRect(0, 0, 332, 252, 18);
-    hud.panel.strokeRoundedRect(0, 0, 332, 252, 18);
+    hud.panel.fillStyle(0x031427, 0.88);
+    hud.panel.fillRoundedRect(0, 0, 344, 270, 12);
+    hud.panel.fillStyle(0x102034, 0.82);
+    hud.panel.fillRoundedRect(4, 4, 336, 262, 10);
+    hud.panel.lineStyle(2, 0xf2ca50, 0.42);
+    hud.panel.strokeRoundedRect(4, 4, 336, 262, 10);
+    hud.panel.fillStyle(0xf2ca50, 0.16);
+    hud.panel.fillRoundedRect(14, 14, 126, 30, 8);
+    hud.panel.fillStyle(0x8c6a42, 0.34);
+    hud.panel.fillCircle(286, 52, 34);
+    hud.panel.fillStyle(0xd9e3ee, 1);
+    hud.panel.fillRoundedRect(262, 42, 48, 28, 10);
+    hud.panel.fillStyle(0xc94d3f, 1);
+    hud.panel.fillTriangle(271, 58, 256, 83, 286, 67);
+    hud.panel.fillStyle(0xf6d6ba, 1);
+    hud.panel.fillCircle(286, 37, 16);
+    hud.panel.fillStyle(0x73452b, 1);
+    hud.panel.fillRoundedRect(270, 22, 32, 14, 8);
 
     // 실제 값은 나중에 refreshHud()에서 주입된다.
     hud.titleText = scene.add.text(16, 14, "능력치", {
-      fontFamily: "Segoe UI",
-      fontSize: "24px",
-      color: "#f3f1e8",
-      fontStyle: "700",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
+      fontSize: "18px",
+      color: "#f2ca50",
+      fontStyle: "800",
     });
     hud.classText = scene.add.text(16, 48, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
-      color: "#d8e8ff",
+      color: "#d3e4fe",
     });
     hud.attackTierText = scene.add.text(16, 70, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
       color: "#d9b65b",
     });
     hud.attackSpeedText = scene.add.text(16, 92, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
       color: "#f4d08a",
     });
     hud.damageText = scene.add.text(16, 114, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
       color: "#ffb38f",
     });
     hud.strengthText = scene.add.text(16, 136, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
       color: "#ffd9b3",
     });
     hud.dexterityText = scene.add.text(16, 158, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
       color: "#bfe6a8",
     });
     hud.knowledgeText = scene.add.text(16, 180, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
       color: "#b8d7ff",
     });
     hud.defenseText = scene.add.text(16, 202, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "13px",
       color: "#ffc7c7",
     });
     hud.hpLabel = scene.add.text(16, 226, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "12px",
-      color: "#ffd4ca",
+      color: "#ffb3ae",
+      fontStyle: "700",
     });
     hud.hpBar = scene.add.graphics();
     hud.xpLabel = scene.add.text(16, 248, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "12px",
-      color: "#d8e8ff",
+      color: "#b8d7ff",
+      fontStyle: "700",
     });
     hud.xpBar = scene.add.graphics();
 
     // roomText와 minimap 프레임은 화면 절대좌표 기준으로 따로 배치한다.
     hud.roomText = scene.add.text(356, 16, "", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "15px",
-      color: "#dcbc71",
-      fontStyle: "700",
+      color: "#f2ca50",
+      fontStyle: "800",
+      stroke: "#1a1a1b",
+      strokeThickness: 4,
     }).setScrollFactor(0).setDepth(1000);
 
+    hud.clockPanel = scene.add.graphics().setScrollFactor(0).setDepth(1001);
+    hud.clockPanel.fillStyle(0x031427, 0.88);
+    hud.clockPanel.fillRoundedRect(556, 20, 168, 58, 12);
+    hud.clockPanel.fillStyle(0xf2ca50, 0.18);
+    hud.clockPanel.fillRoundedRect(562, 26, 156, 46, 9);
+    hud.clockPanel.lineStyle(2, 0xf2ca50, 0.58);
+    hud.clockPanel.strokeRoundedRect(562, 26, 156, 46, 9);
+
     hud.clockText = scene.add.text(1132, 96, "", {
-      fontFamily: "Segoe UI",
-      fontSize: "20px",
-      color: "#f3efc1",
-      fontStyle: "700",
-      stroke: "#31491d",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
+      fontSize: "26px",
+      color: "#d3e4fe",
+      fontStyle: "800",
+      stroke: "#1a1a1b",
       strokeThickness: 4,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
+    }).setOrigin(0.5).setPosition(640, 49).setScrollFactor(0).setDepth(1003);
 
     // 미니맵 카메라가 보이는 영역 위를 감싸는 프레임.
     hud.miniMapFrame = scene.add.graphics().setScrollFactor(0).setDepth(1001);
-    hud.miniMapFrame.fillStyle(0x102012, 0.9);
-    hud.miniMapFrame.lineStyle(2, 0x7c663c, 1);
-    hud.miniMapFrame.fillRoundedRect(1008, 16, 248, 158, 18);
-    hud.miniMapFrame.strokeRoundedRect(1008, 16, 248, 158, 18);
+    hud.miniMapFrame.fillStyle(0x031427, 0.9);
+    hud.miniMapFrame.fillRoundedRect(1008, 16, 248, 158, 12);
+    hud.miniMapFrame.fillStyle(0x102034, 0.9);
+    hud.miniMapFrame.fillRoundedRect(1014, 22, 236, 146, 10);
+    hud.miniMapFrame.lineStyle(2, 0xf2ca50, 0.72);
+    hud.miniMapFrame.strokeRoundedRect(1014, 22, 236, 146, 10);
     hud.miniMapFrame.fillStyle(0x34592d, 0.95);
-    hud.miniMapFrame.fillRoundedRect(1018, 46, 228, 118, 14);
-    hud.miniMapFrame.lineStyle(1, 0xbca36a, 0.75);
-    hud.miniMapFrame.strokeRoundedRect(1018, 46, 228, 118, 14);
+    hud.miniMapFrame.fillRoundedRect(1019, 47, 226, 116, 8);
+    hud.miniMapFrame.lineStyle(1, 0xa1d494, 0.75);
+    hud.miniMapFrame.strokeRoundedRect(1019, 47, 226, 116, 8);
     hud.miniMapFrame.fillStyle(0x7fb05e, 0.14);
     for (let i = 0; i < 10; i += 1) {
       hud.miniMapFrame.fillCircle(1032 + i * 22, 58 + (i % 2) * 10, 8);
@@ -108,11 +136,39 @@
     }
 
     hud.miniMapTitle = scene.add.text(1024, 28, "MINIMAP", {
-      fontFamily: "Segoe UI",
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
       fontSize: "12px",
-      color: "#dce8b2",
-      fontStyle: "700",
+      color: "#f2ca50",
+      fontStyle: "800",
     }).setScrollFactor(0).setDepth(1002);
+
+    hud.skillBar = scene.add.graphics().setScrollFactor(0).setDepth(1001);
+    hud.skillBar.fillStyle(0x031427, 0.86);
+    hud.skillBar.fillRoundedRect(412, 626, 456, 70, 12);
+    hud.skillBar.fillStyle(0x102034, 0.86);
+    hud.skillBar.fillRoundedRect(418, 632, 444, 58, 10);
+    hud.skillBar.lineStyle(2, 0xf2ca50, 0.35);
+    hud.skillBar.strokeRoundedRect(418, 632, 444, 58, 10);
+    hud.skillTexts = ["Q", "W", "E", "R", "CTRL"].map((key, index) => {
+      const x = 454 + index * 78;
+      const width = key === "CTRL" ? 70 : 52;
+      hud.skillBar.fillStyle(index === 4 ? 0xf2ca50 : 0x0b1c30, index === 4 ? 0.9 : 1);
+      hud.skillBar.fillRoundedRect(x, 641, width, 40, 8);
+      hud.skillBar.lineStyle(2, 0x1a1a1b, 1);
+      hud.skillBar.strokeRoundedRect(x, 641, width, 40, 8);
+      return scene.add.text(x + width / 2, 661, key, {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: key === "CTRL" ? "14px" : "16px",
+        color: index === 4 ? "#241a00" : "#d3e4fe",
+        fontStyle: "800",
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
+    });
+    hud.skillCooldownText = scene.add.text(788, 686, "", {
+      fontFamily: "Plus Jakarta Sans, Segoe UI",
+      fontSize: "11px",
+      color: "#b8d7ff",
+      fontStyle: "800",
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
 
     // 왼쪽 패널 요소는 container로 한 번에 관리한다.
     hud.container.add([
@@ -138,15 +194,17 @@
   function refreshHud(scene, hud) {
     const config = global.DungeonConfig;
     const state = scene.playerState;
+    const skillProfile = scene.getSkillProfile();
+    const effectiveAttackSpeed = scene.getEffectiveAttackRateStage();
     // 상태 비율은 progress bar 길이 계산에 사용한다.
     const hpRatio = Phaser.Math.Clamp(state.hp / state.maxHp, 0, 1);
     const xpRatio = Phaser.Math.Clamp(state.xp / state.xpToNext, 0, 1);
 
     // Scene의 현재 상태 스냅샷(playerState)을 실제 표시용 문자열로 바꾼다.
     hud.titleText.setText("능력치");
-    hud.classText.setText(`직업: ${config.player.classLabel}`);
+    hud.classText.setText(`${config.player.classLabel} | LV ${state.level}`);
     hud.attackTierText.setText(`공속 단계: ${formatStat(state.attackRateStage)}`);
-    hud.attackSpeedText.setText(`공격속도: ${formatStat(state.attackSpeed)}`);
+    hud.attackSpeedText.setText(`공격속도: ${formatStat(effectiveAttackSpeed)}`);
     hud.damageText.setText(`데미지: ${formatStat(state.damage)}`);
     hud.strengthText.setText(`힘: ${formatStat(state.strength)}`);
     hud.dexterityText.setText(`덱스: ${formatStat(state.dexterity)}`);
@@ -154,17 +212,19 @@
     hud.defenseText.setText(`방어: ${formatStat(state.defense)}`);
     hud.hpLabel.setText(`HP ${Math.ceil(state.hp)} / ${state.maxHp}`);
     hud.xpLabel.setText(
-      `LV:${state.level} | EXP ${state.xp} / ${state.xpToNext} | CTRL ${scene.getSkillStatusText()}`
+      `LV:${state.level} | EXP ${state.xp} / ${state.xpToNext} | ${skillProfile.name} ${scene.getSkillStatusText()}`
     );
     hud.roomText.setText(
       `STAGE ${String(config.stage.number).padStart(2, "0")} | ${config.stage.label} | ${scene.getStageStatusText()}`
     );
     hud.clockText.setText(scene.getClockText());
+    hud.clockText.setColor(scene.bossSpawned ? "#ffb3ae" : "#fffdd0");
+    hud.skillCooldownText.setText(`CTRL ${skillProfile.name} ${scene.getSkillStatusText()}`);
     scene.roomLabel.setText(scene.getStageWorldLabel());
 
-    drawBar(hud.hpBar, 110, 227, 194, hpRatio, 0x261311, 0xcf6a5a);
-    drawBar(hud.xpBar, 110, 249, 194, xpRatio, 0x182432, 0x79d0ff);
-    refreshStatsPanel(config, state);
+    drawBar(hud.hpBar, 110, 227, 194, hpRatio, 0x1a1a1b, 0xff6d62);
+    drawBar(hud.xpBar, 110, 249, 194, xpRatio, 0x1a1a1b, 0x79d0ff);
+    refreshStatsPanel(config, state, effectiveAttackSpeed);
   }
 
   function drawBar(graphics, x, y, width, ratio, bgColor, fillColor) {
@@ -174,6 +234,8 @@
     graphics.fillRoundedRect(x, y, width, 12, 6);
     graphics.fillStyle(fillColor, 1);
     graphics.fillRoundedRect(x, y, width * ratio, 12, 6);
+    graphics.lineStyle(1, 0xffe2ab, 0.45);
+    graphics.strokeRoundedRect(x, y, width, 12, 6);
   }
 
   function formatStat(value) {
@@ -181,11 +243,12 @@
     return Number.isInteger(value) ? `${value}` : value.toFixed(2);
   }
 
-  function refreshStatsPanel(config, state) {
+  function refreshStatsPanel(config, state, effectiveAttackSpeed) {
     // 캔버스 HUD 외에 HTML 패널에도 같은 값을 동기화한다.
     setPanelText("stat-class", config.player.classLabel);
+    setPanelText("stat-level", state.level);
     setPanelText("stat-attack-tier", formatStat(state.attackRateStage));
-    setPanelText("stat-attack-speed", formatStat(state.attackSpeed));
+    setPanelText("stat-attack-speed", formatStat(effectiveAttackSpeed));
     setPanelText("stat-damage", formatStat(state.damage));
     setPanelText("stat-strength", formatStat(state.strength));
     setPanelText("stat-dexterity", formatStat(state.dexterity));
@@ -220,9 +283,13 @@
       hud.xpLabel,
       hud.xpBar,
       hud.roomText,
+      hud.clockPanel,
       hud.clockText,
       hud.miniMapFrame,
       hud.miniMapTitle,
+      hud.skillBar,
+      hud.skillCooldownText,
+      ...hud.skillTexts,
     ];
   }
 

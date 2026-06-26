@@ -14,12 +14,17 @@
       this.attackCooldown = 0;
       this.playerAttackLockedUntil = 0;
       this.skillCooldownUntil = 0;
+      this.attackSpeedBuffUntil = 0;
       this.stageStartedAt = 0;
       this.waveEnded = false;
       this.bossSpawned = false;
       this.stageCleared = false;
+      this.gameOver = false;
       this.bossMonster = null;
       this.stageClearText = null;
+      this.gameOverOverlay = null;
+      this.gameOverRestartBounds = null;
+      this.gameOverPointerHandler = null;
       this.lastStageUiSecond = -1;
       // 플레이어의 현재 상태 스냅샷.
       // 전투 계산과 HUD 갱신이 모두 이 객체를 기준으로 이뤄진다.
@@ -39,6 +44,15 @@
         magicDamage: config.player.knowledge * 10,
         levelDamageBonus: 0,
         levelDefenseBonus: 0,
+        equippedItems: {
+          weapon: null,
+          shoes: null,
+          armor: null,
+          helmet: null,
+          accessory1: null,
+          accessory2: null,
+        },
+        inventory: [],
       };
       // 기본 스탯으로 파생 능력치(공속, 데미지, 최대 HP 등)를 계산한다.
       this.recalculatePlayerStats();
@@ -68,9 +82,9 @@
 
       // 잔디 배경.
       const background = this.add.graphics();
-      background.fillGradientStyle(0x5a8d46, 0x5a8d46, 0x355b2f, 0x355b2f, 1);
+      background.fillGradientStyle(0x477b3e, 0x5f9b4f, 0x243f2b, 0x1f3525, 1);
       background.fillRect(0, 0, config.world.width, config.world.height);
-      background.fillStyle(0x6aa34f, 0.16);
+      background.fillStyle(0xa1d494, 0.1);
       for (let i = 0; i < 180; i += 1) {
         const size = Phaser.Math.Between(40, 120);
         background.fillCircle(
@@ -80,27 +94,27 @@
         );
       }
 
-      background.lineStyle(2, 0x6b5130, 0.55);
+      background.lineStyle(2, 0xffe2ab, 0.24);
       background.strokeRoundedRect(300, 300, 1800, 1800, 42);
-      background.lineStyle(3, 0x83633d, 0.65);
+      background.lineStyle(3, 0xffbf00, 0.3);
       background.strokeRoundedRect(540, 540, 1320, 1320, 28);
 
       // 십자형 흙길. 플레이 동선과 미니맵 가독성을 동시에 담당한다.
       const trail = this.add.graphics();
-      trail.fillStyle(0x8b6b43, 0.9);
+      trail.fillStyle(0x8c6a42, 0.9);
       trail.fillRoundedRect(1120, 360, 160, 1680, 46);
       trail.fillRoundedRect(560, 1120, 1280, 160, 46);
-      trail.fillStyle(0xb08a5a, 0.22);
+      trail.fillStyle(0xffe2ab, 0.17);
       trail.fillRoundedRect(1152, 388, 96, 1624, 38);
       trail.fillRoundedRect(588, 1152, 1224, 96, 38);
 
       // 방 외곽 느낌을 주는 배경 패널/테두리.
       const roomGraphics = this.add.graphics();
-      roomGraphics.fillStyle(0x294326, 0.42);
+      roomGraphics.fillStyle(0x1f3424, 0.5);
       roomGraphics.fillRoundedRect(332, 332, 1736, 1736, 42);
-      roomGraphics.lineStyle(4, 0xb2905f, 0.85);
+      roomGraphics.lineStyle(4, 0x1a1a1b, 0.9);
       roomGraphics.strokeRoundedRect(360, 360, 1680, 1680, 36);
-      roomGraphics.lineStyle(2, 0xe1c98f, 0.35);
+      roomGraphics.lineStyle(2, 0xffe2ab, 0.38);
       roomGraphics.strokeRoundedRect(402, 402, 1596, 1596, 32);
 
       // 나무/연못/수풀 등 지형지물 배치.
@@ -109,11 +123,11 @@
       // 월드 상단 중앙에 보이는 방 이름 라벨.
       this.roomLabel = this.add
         .text(1200, 220, "ROOM 01", {
-          fontFamily: "Segoe UI",
+          fontFamily: "Plus Jakarta Sans, Segoe UI",
           fontSize: "42px",
-          color: "#f7dc94",
+          color: "#ffe2ab",
           fontStyle: "700",
-          stroke: "#31491d",
+          stroke: "#1a1a1b",
           strokeThickness: 6,
         })
         .setOrigin(0.5);
@@ -186,11 +200,11 @@
 
       // 플레이어 머리 위에 붙는 레벨 표시.
       this.playerLevelText = this.add.text(this.player.x, this.player.y - 52, "LV:0", {
-        fontFamily: "Segoe UI",
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
         fontSize: "12px",
-        color: "#fff0b5",
+        color: "#fffdd0",
         fontStyle: "700",
-        stroke: "#081015",
+        stroke: "#1a1a1b",
         strokeThickness: 3,
       }).setOrigin(0.5).setDepth(32);
     }
@@ -308,6 +322,7 @@
     refreshUi() {
       // playerState 값을 HUD에 반영하는 얇은 진입점.
       hudSystem.refreshHud(this, this.hud);
+      this.renderInventory();
     }
 
     getStageElapsedTime() {
@@ -343,6 +358,41 @@
       return `${seconds}s`;
     }
 
+    getSkillProfile() {
+      if (this.playerState.level >= 10) {
+        return {
+          name: "불기둥",
+          color: 0xff6d2d,
+          accent: 0xffbf00,
+          multiplier: 3.8,
+          attackSpeedBuff: true,
+        };
+      }
+
+      if (this.playerState.level >= 5) {
+        return {
+          name: "번개",
+          color: 0x79d0ff,
+          accent: 0xfffdd0,
+          multiplier: 2.35,
+          attackSpeedBuff: true,
+        };
+      }
+
+      return {
+        name: "함성",
+        color: 0xffd36e,
+        accent: 0xfffdd0,
+        multiplier: 1.25,
+        attackSpeedBuff: false,
+      };
+    }
+
+    getEffectiveAttackRateStage(time = this.time.now) {
+      const buffMultiplier = time < this.attackSpeedBuffUntil ? 1.2 : 1;
+      return this.playerState.attackRateStage * buffMultiplier;
+    }
+
     getStageStatusText() {
       if (this.stageCleared) {
         return "CLEAR";
@@ -369,7 +419,7 @@
     }
 
     updateStageFlow() {
-      if (this.stageCleared || this.bossSpawned) {
+      if (this.gameOver || this.stageCleared || this.bossSpawned) {
         return;
       }
 
@@ -387,7 +437,7 @@
     }
 
     clearStage() {
-      if (this.stageCleared) {
+      if (this.gameOver || this.stageCleared) {
         return;
       }
 
@@ -445,24 +495,42 @@
       const strengthDelta = this.playerState.strength - config.player.strength;
       const dexterityDelta = this.playerState.dexterity - config.player.dexterity;
       const knowledgeDelta = this.playerState.knowledge - config.player.knowledge;
+      const equipmentStats = this.getEquippedStats();
 
       this.playerState.attackRateStage = Number(
-        (config.player.baseAttackRateStage + dexterityDelta * 0.12).toFixed(2)
+        (config.player.baseAttackRateStage + (dexterityDelta + equipmentStats.dexterity) * 0.12).toFixed(2)
       );
       this.playerState.attackSpeed = this.playerState.attackRateStage;
       this.playerState.damage = Number(
-        (config.player.baseDamage + this.playerState.levelDamageBonus + strengthDelta * 0.35).toFixed(2)
+        (
+          config.player.baseDamage +
+          this.playerState.levelDamageBonus +
+          (strengthDelta + equipmentStats.strength) * 0.65 +
+          equipmentStats.damage
+        ).toFixed(2)
       );
       this.playerState.defense = Number(
-        (config.player.defense + this.playerState.levelDefenseBonus + dexterityDelta * 0.3).toFixed(2)
+        (
+          config.player.defense +
+          this.playerState.levelDefenseBonus +
+          (dexterityDelta + equipmentStats.dexterity) * 0.3 +
+          equipmentStats.defense
+        ).toFixed(2)
       );
-      this.playerState.maxHp = config.player.maxHp + strengthDelta * 5;
-      this.playerState.magicDamage = knowledgeDelta >= 0 ? (config.player.knowledge + knowledgeDelta) * 7 : 0;
+      this.playerState.maxHp = config.player.maxHp + (strengthDelta + equipmentStats.strength) * 5;
+      this.playerState.magicDamage =
+        knowledgeDelta + equipmentStats.knowledge >= 0
+          ? (config.player.knowledge + knowledgeDelta + equipmentStats.knowledge) * 7
+          : 0;
     }
 
     spawnMonster() {
       // 몬스터 수가 가득 찼으면 더 생성하지 않는다.
       if (this.monsters.getChildren().length >= config.monsters.maxAlive) {
+        return;
+      }
+
+      if (this.gameOver) {
         return;
       }
 
@@ -474,11 +542,13 @@
       const monsterLevel = leveling.getMonsterLevel(this.playerState.level, config.room.minMonsterLevel);
       const monsterMaxHp = leveling.getMonsterMaxHp(monsterLevel);
 
-      const variant = Phaser.Math.Between(0, 2);
+      const variant = this.getMonsterVariantByLevel(monsterLevel);
       const monster = this.physics.add.sprite(spawnX, spawnY, `monster-${variant}-idle`);
       // setData는 엔티티별 상태를 저장하는 간단한 key-value 저장소처럼 쓴다.
       monster.setDepth(18);
+      monster.setScale(this.getMonsterScaleByLevel(monsterLevel));
       monster.setData("variant", variant);
+      monster.setData("speciesName", this.getMonsterSpeciesName(variant));
       monster.setData("level", monsterLevel);
       monster.setData("defenseMultiplier", leveling.getMonsterDefenseMultiplier(monsterLevel));
       monster.setData("hp", monsterMaxHp);
@@ -488,11 +558,11 @@
       monster.setData("nextShotAt", this.time.now + Phaser.Math.Between(config.monsters.attackIntervalMin, config.monsters.attackIntervalMax));
 
       const hpBar = this.add.graphics().setDepth(30);
-      const levelText = this.add.text(monster.x, monster.y - 44, `LV:${monsterLevel}`, {
-        fontFamily: "Segoe UI",
+      const levelText = this.add.text(monster.x, monster.y - 44, `LV${monsterLevel} ${this.getMonsterSpeciesName(variant)}`, {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
         fontSize: "11px",
-        color: "#f4e5b5",
-        stroke: "#081015",
+        color: "#fffdd0",
+        stroke: "#1a1a1b",
         strokeThickness: 2,
       }).setOrigin(0.5).setDepth(31);
 
@@ -501,8 +571,303 @@
       this.monsters.add(monster);
     }
 
+    getMonsterVariantByLevel(level) {
+      if (level <= 1) {
+        return 0;
+      }
+
+      if (level === 2) {
+        return 1;
+      }
+
+      return 2;
+    }
+
+    getMonsterSpeciesName(variant) {
+      return ["토끼", "멧돼지", "박쥐냥"][variant] || "몬스터";
+    }
+
+    getMonsterScaleByLevel(level) {
+      return Phaser.Math.Clamp(1 + (level - 1) * 0.08, 1, 1.28);
+    }
+
+    getEquipmentSlots() {
+      return [
+        { key: "weapon", label: "무기", icon: "weapon" },
+        { key: "helmet", label: "투구", icon: "helmet" },
+        { key: "armor", label: "갑옷", icon: "armor" },
+        { key: "shoes", label: "신발", icon: "shoes" },
+        { key: "accessory1", label: "악세사리 1", icon: "accessory1" },
+        { key: "accessory2", label: "악세사리 2", icon: "accessory2" },
+      ];
+    }
+
+    getEquippedStats() {
+      return Object.values(this.playerState.equippedItems).reduce(
+        (total, item) => {
+          if (!item) {
+            return total;
+          }
+
+          Object.entries(item.stats).forEach(([key, value]) => {
+            total[key] = (total[key] || 0) + value;
+          });
+          return total;
+        },
+        { damage: 0, strength: 0, dexterity: 0, knowledge: 0, defense: 0 }
+      );
+    }
+
+    maybeAutoLootEquipment(level, isBoss) {
+      const shouldDrop = isBoss || Phaser.Math.Between(1, 100) <= 30;
+      if (!shouldDrop) {
+        return;
+      }
+
+      const item = this.createEquipmentItem(level, isBoss);
+      this.playerState.inventory.unshift(item);
+      this.renderInventory();
+      this.showLootToast(item);
+    }
+
+    createEquipmentItem(level, isBoss) {
+      const rarityRoll = isBoss ? 100 : Phaser.Math.Between(1, 100);
+      const rarity =
+        isBoss ? "전설" :
+        rarityRoll >= 92 ? "전설" :
+        rarityRoll >= 72 ? "희귀" :
+        rarityRoll >= 42 ? "고급" :
+        "일반";
+      const rarityPower = { 일반: 1, 고급: 1.45, 희귀: 2.1, 전설: 3.2 }[rarity];
+      const levelPower = isBoss
+        ? Math.max(40, Math.round(Math.pow(Math.max(1, level), 1.7) * 14))
+        : Math.max(1, Math.round(Math.pow(Math.max(1, level), 1.35) * rarityPower));
+      const templates = [
+        { type: "weapon", name: "전사의 검", stats: { damage: 4 + levelPower * 2, strength: Math.ceil(levelPower / 3) } },
+        { type: "shoes", name: "가죽 신발", stats: { dexterity: 1 + Math.ceil(levelPower / 2), defense: Math.ceil(levelPower / 4) } },
+        { type: "armor", name: "은빛 갑옷", stats: { defense: 3 + levelPower, strength: Math.ceil(levelPower / 4) } },
+        { type: "helmet", name: "강철 투구", stats: { defense: 2 + levelPower, knowledge: Math.ceil(levelPower / 5) } },
+        { type: "accessory", name: "번개의 반지", stats: { damage: 1 + levelPower, dexterity: Math.ceil(levelPower / 3) } },
+        { type: "accessory", name: "푸른 보석 목걸이", stats: { knowledge: Math.ceil(levelPower / 2), damage: Math.ceil(levelPower / 2) } },
+      ];
+      const template = Phaser.Utils.Array.GetRandom(templates);
+
+      return {
+        id: `${Date.now()}-${Phaser.Math.Between(1000, 9999)}`,
+        name: `${isBoss ? "차원 전설" : rarity} ${template.name}`,
+        baseName: template.name,
+        upgradeLevel: 0,
+        type: template.type,
+        level,
+        rarity,
+        stats: template.stats,
+        baseStats: { ...template.stats },
+      };
+    }
+
+    equipItem(index) {
+      const nextItem = this.playerState.inventory[index];
+      if (!nextItem) {
+        return;
+      }
+
+      if (this.tryUpgradeSameAccessory(nextItem, index)) {
+        return;
+      }
+
+      const slotKey = this.getTargetEquipmentSlot(nextItem);
+      if (!slotKey) {
+        return;
+      }
+
+      this.playerState.inventory.splice(index, 1);
+      const previousItem = this.playerState.equippedItems[slotKey];
+      if (previousItem) {
+        this.playerState.inventory.unshift(previousItem);
+      }
+
+      this.playerState.equippedItems[slotKey] = nextItem;
+      this.recalculatePlayerStats();
+      this.playerState.hp = Math.min(this.playerState.hp, this.playerState.maxHp);
+      this.refreshUi();
+    }
+
+    tryUpgradeSameAccessory(nextItem, inventoryIndex) {
+      if (nextItem.type !== "accessory") {
+        return false;
+      }
+
+      const sameSlotKey = ["accessory1", "accessory2"].find((slotKey) => {
+        const equippedItem = this.playerState.equippedItems[slotKey];
+        return this.getNormalizedItemName(equippedItem) === this.getNormalizedItemName(nextItem);
+      });
+
+      if (!sameSlotKey) {
+        return false;
+      }
+
+      const equippedItem = this.playerState.equippedItems[sameSlotKey];
+      equippedItem.upgradeLevel = (equippedItem.upgradeLevel || 0) + 1;
+      Object.entries(nextItem.stats).forEach(([key, value]) => {
+        equippedItem.stats[key] = Number(((equippedItem.stats[key] || 0) + value * 0.3).toFixed(2));
+      });
+      equippedItem.name = this.getUpgradedItemName(equippedItem);
+
+      this.playerState.inventory.splice(inventoryIndex, 1);
+      this.recalculatePlayerStats();
+      this.playerState.hp = Math.min(this.playerState.hp, this.playerState.maxHp);
+      this.refreshUi();
+      return true;
+    }
+
+    getUpgradedItemName(item) {
+      const baseName = item.name.replace(/\s\+\d+$/, "");
+      return item.upgradeLevel > 0 ? `${baseName} +${item.upgradeLevel}` : baseName;
+    }
+
+    getNormalizedItemName(item) {
+      if (!item) {
+        return "";
+      }
+
+      return (item.baseName || item.name)
+        .replace(/\s\+\d+$/, "")
+        .replace(/^(차원 전설|전설|희귀|고급|일반)\s+/, "")
+        .trim();
+    }
+
+    getTargetEquipmentSlot(item) {
+      if (item.type !== "accessory") {
+        return item.type;
+      }
+
+      if (!this.playerState.equippedItems.accessory1) {
+        return "accessory1";
+      }
+
+      if (!this.playerState.equippedItems.accessory2) {
+        return "accessory2";
+      }
+
+      return "accessory1";
+    }
+
+    renderInventory() {
+      const equippedElement = document.getElementById("equipment-slots");
+      const inventoryElement = document.getElementById("inventory-list");
+      if (!equippedElement || !inventoryElement) {
+        return;
+      }
+
+      equippedElement.innerHTML = "";
+      this.getEquipmentSlots().forEach((slot) => {
+        const item = this.playerState.equippedItems[slot.key];
+        const row = document.createElement("div");
+        row.className = "equipment-slot";
+
+        const icon = document.createElement("div");
+        icon.className = `item-icon ${item ? this.getItemIconClass(item, slot.key) : slot.icon}`;
+
+        const body = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = item ? item.name : `${slot.label} 비어있음`;
+        const stats = document.createElement("span");
+        const effectLabel = item?.type === "accessory" ? "중복 +30% 강화" : "장착 적용";
+        stats.textContent = item ? `${this.getItemTypeLabel(item)} ${effectLabel} | ${this.formatItemStats(item)}` : "더블클릭 장착";
+
+        body.append(title, stats);
+        row.append(icon, body);
+        equippedElement.appendChild(row);
+      });
+
+      inventoryElement.innerHTML = "";
+      if (this.playerState.inventory.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "inventory-empty";
+        empty.textContent = "획득한 장비 없음";
+        inventoryElement.appendChild(empty);
+        return;
+      }
+
+      this.playerState.inventory.forEach((item, index) => {
+        const row = document.createElement("div");
+        row.className = "inventory-item";
+        row.title = "더블클릭하면 장착됩니다";
+        row.ondblclick = () => this.equipItem(index);
+
+        const icon = document.createElement("div");
+        icon.className = `item-icon ${this.getItemIconClass(item)}`;
+
+        const body = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = item.name;
+        const stats = document.createElement("span");
+        stats.textContent = `${this.getItemTypeLabel(item)} | LV${item.level} | ${this.formatItemStats(item)}`;
+
+        body.append(name, stats);
+        row.append(icon, body);
+        inventoryElement.appendChild(row);
+      });
+    }
+
+    getItemIconClass(item, slotKey = "") {
+      if (slotKey === "accessory2") {
+        return "accessory2";
+      }
+
+      return item.type;
+    }
+
+    getItemTypeLabel(item) {
+      return {
+        weapon: "무기",
+        shoes: "신발",
+        armor: "갑옷",
+        helmet: "투구",
+        accessory: "악세사리",
+      }[item.type] || "장비";
+    }
+
+    formatItemStats(item) {
+      const labels = {
+        damage: "데미지",
+        strength: "힘",
+        dexterity: "덱스",
+        knowledge: "지식",
+        defense: "방어",
+      };
+
+      return Object.entries(item.stats)
+        .map(([key, value]) => `${labels[key]} +${value}`)
+        .join(", ");
+    }
+
+    showLootToast(item) {
+      const toast = this.add.text(640, 604, `자동 습득: ${item.name}`, {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "15px",
+        color: "#ffe2ab",
+        fontStyle: "800",
+        stroke: "#1a1a1b",
+        strokeThickness: 4,
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(1300);
+
+      this.tweens.add({
+        targets: toast,
+        y: 570,
+        alpha: 0,
+        duration: 900,
+        ease: "Cubic.easeOut",
+        onComplete: () => toast.destroy(),
+      });
+    }
+
     spawnBoss() {
       if (this.bossSpawned || this.stageCleared) {
+        return;
+      }
+
+      if (this.gameOver) {
         return;
       }
 
@@ -514,31 +879,34 @@
       const spawnX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 120, config.world.width - 120);
       const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 120, config.world.height - 120);
       const bossLevel = Math.max(config.room.minMonsterLevel, this.playerState.level + 2);
+      const bossProfile = this.getBossProfile(bossLevel);
       const bossBaseHp = leveling.getMonsterMaxHp(bossLevel);
       const bossMaxHp = Math.max(
         220,
-        Math.round(bossBaseHp * config.monsters.bossHpMultiplier)
+        Math.round(bossBaseHp * config.monsters.bossHpMultiplier * bossProfile.hpMultiplier)
       );
 
       const boss = this.physics.add.sprite(spawnX, spawnY, "boss-idle");
-      boss.setScale(config.monsters.bossScale);
+      boss.setScale(config.monsters.bossScale * bossProfile.scale);
+      boss.setTint(bossProfile.tint);
       boss.setDepth(22);
       boss.setCollideWorldBounds(true);
       boss.setData("isBoss", true);
+      boss.setData("bossProfile", bossProfile);
       boss.setData("level", bossLevel);
       boss.setData("hp", bossMaxHp);
       boss.setData("maxHp", bossMaxHp);
-      boss.setData("speed", Math.round(config.monsters.speedMax * config.monsters.bossSpeedMultiplier));
+      boss.setData("speed", Math.round(config.monsters.speedMax * config.monsters.bossSpeedMultiplier * bossProfile.speedMultiplier));
       boss.setData("attackRange", config.monsters.attackRangeMax + 70);
-      boss.setData("defenseMultiplier", leveling.getMonsterDefenseMultiplier(bossLevel) + 1.2);
+      boss.setData("defenseMultiplier", leveling.getMonsterDefenseMultiplier(bossLevel) + bossProfile.defenseBonus);
       boss.setData("nextShotAt", this.time.now + 900);
 
       const hpBar = this.add.graphics().setDepth(34);
-      const levelText = this.add.text(boss.x, boss.y - 72, `BOSS LV:${bossLevel}`, {
-        fontFamily: "Segoe UI",
+      const levelText = this.add.text(boss.x, boss.y - 72, `${bossProfile.name} LV:${bossLevel}`, {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
         fontSize: "13px",
-        color: "#ffd98c",
-        stroke: "#2a1508",
+        color: bossProfile.labelColor,
+        stroke: "#1a1a1b",
         strokeThickness: 3,
         fontStyle: "700",
       }).setOrigin(0.5).setDepth(35);
@@ -552,7 +920,65 @@
       this.refreshUi();
     }
 
+    getBossProfile(level) {
+      if (level >= 15) {
+        return {
+          name: "차원의 수호자",
+          tint: 0xff7a3d,
+          labelColor: "#ffb38f",
+          hpColor: 0xff6d2d,
+          hpMultiplier: 2.4,
+          defenseBonus: 3.4,
+          speedMultiplier: 1.16,
+          scale: 1.22,
+        };
+      }
+
+      if (level >= 10) {
+        return {
+          name: "불꽃 수호자",
+          tint: 0xffb14a,
+          labelColor: "#ffdf8a",
+          hpColor: 0xff9a3d,
+          hpMultiplier: 1.75,
+          defenseBonus: 2.4,
+          speedMultiplier: 1.08,
+          scale: 1.12,
+        };
+      }
+
+      if (level >= 5) {
+        return {
+          name: "번개 수호자",
+          tint: 0x94d6ff,
+          labelColor: "#b8d7ff",
+          hpColor: 0x79d0ff,
+          hpMultiplier: 1.28,
+          defenseBonus: 1.8,
+          speedMultiplier: 1,
+          scale: 1.06,
+        };
+      }
+
+      return {
+        name: "숲의 수호자",
+        tint: 0xffffff,
+        labelColor: "#ffe2ab",
+        hpColor: 0xffbf00,
+        hpMultiplier: 1,
+        defenseBonus: 1.2,
+        speedMultiplier: 0.95,
+        scale: 1,
+      };
+    }
+
     updatePlayerMovement(time) {
+      if (this.gameOver) {
+        this.player.setVelocity(0, 0);
+        this.player.anims.stop();
+        return;
+      }
+
       // 입력 -> 속도 계산 -> 방향/애니메이션 반영 순서로 진행된다.
       const sprinting = this.wasd.SHIFT.isDown;
       const speed = config.player.speed * (sprinting ? 1.4 : 1);
@@ -596,6 +1022,10 @@
     }
 
     updateMonsters(time) {
+      if (this.gameOver) {
+        return;
+      }
+
       // 모든 몬스터를 순회하며 이동/공격/머리 위 UI를 갱신한다.
       this.monsters.getChildren().forEach((monster) => {
         if (!monster.active) {
@@ -614,7 +1044,7 @@
           monster.setFlipX(false);
         }
 
-        if (distance <= desiredRange && time >= monster.getData("nextShotAt")) {
+        if (this.canMonsterUseRangedAttack(monster, distance, desiredRange, time)) {
           this.fireMonsterProjectile(monster);
           monster.setData(
             "nextShotAt",
@@ -626,6 +1056,22 @@
 
         this.drawMonsterHud(monster);
       });
+    }
+
+    canMonsterUseRangedAttack(monster, distance, desiredRange, time) {
+      if (distance > desiredRange || time < monster.getData("nextShotAt")) {
+        return false;
+      }
+
+      if (monster.getData("isBoss")) {
+        return true;
+      }
+
+      if (monster.getData("level") < 3) {
+        return false;
+      }
+
+      return Phaser.Math.Between(1, 100) <= 38;
     }
 
     updateMonsterAnimation(monster, time) {
@@ -659,16 +1105,24 @@
       const maxHp = monster.getData("maxHp");
       const ratio = Phaser.Math.Clamp(hp / maxHp, 0, 1);
       const isBoss = monster.getData("isBoss");
-      const barWidth = isBoss ? 86 : 36;
-      const barY = isBoss ? monster.y - 56 : monster.y - 34;
-      const textY = isBoss ? monster.y - 70 : monster.y - 44;
+      const bossProfile = monster.getData("bossProfile");
+      const level = monster.getData("level");
+      const speciesName = monster.getData("speciesName");
+      const barWidth = isBoss ? 92 : 42 + Math.min(level, 4) * 4;
+      const barY = isBoss ? monster.y - 58 : monster.y - 36 - (monster.scaleY - 1) * 20;
+      const textY = isBoss ? monster.y - 74 : monster.y - 48 - (monster.scaleY - 1) * 20;
 
       hpBar.clear();
-      hpBar.fillStyle(isBoss ? 0x2f1209 : 0x160f0f, 0.95);
+      hpBar.fillStyle(0x1a1a1b, 0.95);
       hpBar.fillRoundedRect(monster.x - barWidth / 2, barY, barWidth, isBoss ? 8 : 6, 3);
-      hpBar.fillStyle(isBoss ? 0xff875e : 0xd35f5f, 1);
+      hpBar.fillStyle(isBoss ? bossProfile?.hpColor || 0xffbf00 : 0xff6d62, 1);
       hpBar.fillRoundedRect(monster.x - barWidth / 2, barY, barWidth * ratio, isBoss ? 8 : 6, 3);
+      hpBar.lineStyle(1, 0xffe2ab, 0.5);
+      hpBar.strokeRoundedRect(monster.x - barWidth / 2, barY, barWidth, isBoss ? 8 : 6, 3);
 
+      if (!isBoss && speciesName) {
+        levelText.setText(`LV${level} ${speciesName}`);
+      }
       levelText.setPosition(monster.x, textY);
     }
 
@@ -712,7 +1166,7 @@
 
     handleProjectileHit(player, projectile) {
       // overlap 콜백. 이미 제거된 투사체면 무시한다.
-      if (!projectile.active) {
+      if (this.gameOver || !projectile.active) {
         return;
       }
 
@@ -722,9 +1176,17 @@
       this.playerState.hp = Math.max(0, this.playerState.hp - reducedDamage);
       projectile.destroy();
       this.refreshUi();
+
+      if (this.playerState.hp <= 0) {
+        this.showGameOver();
+      }
     }
 
     handleAutoAttack(time) {
+      if (this.gameOver) {
+        return;
+      }
+
       // 쿨타임이 끝났고 사거리 내 대상이 있을 때만 자동 공격한다.
       if (time < this.attackCooldown) {
         return;
@@ -736,7 +1198,7 @@
       }
 
       // 공속이 올라갈수록 실제 공격 주기가 짧아진다.
-      this.attackCooldown = time + Math.max(120, config.player.attackCooldownBase / this.playerState.attackRateStage);
+      this.attackCooldown = time + Math.max(120, config.player.attackCooldownBase / this.getEffectiveAttackRateStage(time));
       this.playerAttackLockedUntil = time + 140;
 
       this.playMeleeAttack(target);
@@ -744,6 +1206,10 @@
     }
 
     handleSkillCast(time) {
+      if (this.gameOver) {
+        return;
+      }
+
       if (!Phaser.Input.Keyboard.JustDown(this.skillKey)) {
         return;
       }
@@ -753,20 +1219,24 @@
       }
 
       this.skillCooldownUntil = time + config.stage.skillCooldown;
-      const skillDamage = this.playerState.damage * 0.3 + this.playerState.strength * 10;
-      const splashRadius = config.stage.skillRadius;
+      const skillProfile = this.getSkillProfile();
+      const skillDamage = Math.round(
+        (this.playerState.damage + this.playerState.magicDamage + this.playerState.strength * 4) *
+          Math.pow(1.42, this.playerState.level + 1) *
+          skillProfile.multiplier
+      );
 
-      this.playSkillExplosion(splashRadius);
+      if (skillProfile.attackSpeedBuff) {
+        this.attackSpeedBuffUntil = time + 2000;
+      }
+
+      this.playSkillExplosion(skillProfile);
 
       this.monsters.getChildren().forEach((monster) => {
         if (!monster.active) {
           return;
         }
-
-        const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, monster.x, monster.y);
-        if (distance <= splashRadius) {
-          this.damageMonster(monster, skillDamage);
-        }
+        this.damageMonster(monster, skillDamage);
       });
 
       this.refreshUi();
@@ -830,27 +1300,227 @@
       });
     }
 
-    playSkillExplosion(radius) {
-      const flash = this.add.circle(this.player.x, this.player.y, 24, 0xffd36e, 0.72).setDepth(39);
+    playSkillExplosion(skillProfile) {
+      const flash = this.add.circle(this.player.x, this.player.y, 24, skillProfile.color, 0.72).setDepth(39);
       const ring = this.add.circle(this.player.x, this.player.y, 30).setDepth(40);
-      ring.setStrokeStyle(8, 0xff9b54, 1);
+      ring.setStrokeStyle(8, skillProfile.accent, 1);
+      const skillText = this.add.text(this.player.x, this.player.y - 84, skillProfile.name, {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "24px",
+        color: "#fffdd0",
+        fontStyle: "800",
+        stroke: "#1a1a1b",
+        strokeThickness: 5,
+      }).setOrigin(0.5).setDepth(44);
 
       this.tweens.add({
         targets: flash,
-        scaleX: radius / 18,
-        scaleY: radius / 18,
+        scaleX: 16,
+        scaleY: 16,
         alpha: 0,
-        duration: 260,
+        duration: 360,
         onComplete: () => flash.destroy(),
       });
 
       this.tweens.add({
         targets: ring,
-        scaleX: radius / 15,
-        scaleY: radius / 15,
+        scaleX: 18,
+        scaleY: 18,
         alpha: 0,
-        duration: 320,
+        duration: 460,
         onComplete: () => ring.destroy(),
+      });
+
+      this.tweens.add({
+        targets: skillText,
+        y: this.player.y - 126,
+        alpha: 0,
+        duration: 720,
+        ease: "Cubic.easeOut",
+        onComplete: () => skillText.destroy(),
+      });
+
+      if (skillProfile.name === "번개") {
+        this.monsters.getChildren().forEach((monster) => {
+          if (!monster.active) {
+            return;
+          }
+          const bolt = this.add.graphics().setDepth(43);
+          bolt.lineStyle(5, 0xfffdd0, 1);
+          bolt.lineBetween(monster.x - 10, monster.y - 90, monster.x + 8, monster.y - 34);
+          bolt.lineTo(monster.x - 8, monster.y - 14);
+          bolt.lineStyle(2, 0x79d0ff, 1);
+          bolt.lineBetween(monster.x + 8, monster.y - 34, monster.x + 18, monster.y - 6);
+          this.tweens.add({
+            targets: bolt,
+            alpha: 0,
+            duration: 260,
+            onComplete: () => bolt.destroy(),
+          });
+        });
+      }
+
+      if (skillProfile.name === "불기둥") {
+        this.monsters.getChildren().forEach((monster) => {
+          if (!monster.active) {
+            return;
+          }
+          const pillar = this.add.graphics().setDepth(43);
+          pillar.fillStyle(0xff6d2d, 0.82);
+          pillar.fillRoundedRect(monster.x - 18, monster.y - 72, 36, 86, 16);
+          pillar.fillStyle(0xffbf00, 0.92);
+          pillar.fillRoundedRect(monster.x - 9, monster.y - 56, 18, 58, 9);
+          this.tweens.add({
+            targets: pillar,
+            scaleY: 1.3,
+            alpha: 0,
+            duration: 360,
+            onComplete: () => pillar.destroy(),
+          });
+        });
+      }
+    }
+
+    showGameOver() {
+      if (this.gameOver) {
+        return;
+      }
+
+      this.gameOver = true;
+      this.waveEnded = true;
+      this.monsterSpawner?.remove(false);
+      this.player.setVelocity(0, 0);
+      this.player.anims.stop();
+      this.player.setTexture("warrior-idle");
+      this.player.setTint(0x6d7480);
+      this.removeActiveEnemies();
+
+      const overlay = this.add.container(640, 360).setScrollFactor(0).setDepth(1600);
+      const dim = this.add.rectangle(0, 0, 1280, 720, 0x060808, 0.72);
+      const panel = this.add.graphics();
+      panel.fillStyle(0x1a1a1b, 0.98);
+      panel.fillRoundedRect(-220, -138, 440, 276, 14);
+      panel.fillStyle(0x1b2b20, 0.98);
+      panel.fillRoundedRect(-212, -130, 424, 260, 10);
+      panel.lineStyle(2, 0xffe2ab, 0.74);
+      panel.strokeRoundedRect(-212, -130, 424, 260, 10);
+
+      const title = this.add.text(0, -82, "끝", {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "54px",
+        color: "#ffb3ae",
+        fontStyle: "800",
+        stroke: "#1a1a1b",
+        strokeThickness: 8,
+      }).setOrigin(0.5);
+      const subtitle = this.add.text(0, -28, `LV ${this.playerState.level}부터 다시 도전`, {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "18px",
+        color: "#fffdd0",
+        fontStyle: "700",
+      }).setOrigin(0.5);
+      const restartButtonBg = this.add.rectangle(0, 62, 214, 58, 0xffbf00, 1)
+        .setStrokeStyle(3, 0x1a1a1b, 1)
+        .setInteractive({ useHandCursor: true });
+      const restartButton = this.add.text(0, 62, "다시시작 하기", {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "20px",
+        color: "#402d00",
+        fontStyle: "800",
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+      const setButtonScale = (scale) => {
+        restartButtonBg.setScale(scale);
+        restartButton.setScale(scale);
+      };
+      const restart = () => this.restartFromCurrentLevel();
+      restartButtonBg.on("pointerover", () => setButtonScale(1.04));
+      restartButtonBg.on("pointerout", () => setButtonScale(1));
+      restartButtonBg.on("pointerdown", restart);
+      restartButton.on("pointerover", () => setButtonScale(1.04));
+      restartButton.on("pointerout", () => setButtonScale(1));
+      restartButton.on("pointerdown", restart);
+
+      overlay.add([dim, panel, title, subtitle, restartButtonBg, restartButton]);
+      this.gameOverOverlay = overlay;
+      this.gameOverRestartBounds = new Phaser.Geom.Rectangle(533, 393, 214, 58);
+      this.gameOverPointerHandler = (pointer) => {
+        if (!this.gameOver || !this.gameOverRestartBounds?.contains(pointer.x, pointer.y)) {
+          return;
+        }
+
+        this.restartFromCurrentLevel();
+      };
+      this.input.on("pointerdown", this.gameOverPointerHandler);
+      this.refreshUi();
+    }
+
+    restartFromCurrentLevel() {
+      this.monsterSpawner?.remove(false);
+      if (this.gameOverPointerHandler) {
+        this.input.off("pointerdown", this.gameOverPointerHandler);
+      }
+      this.gameOverPointerHandler = null;
+      this.gameOverRestartBounds = null;
+      this.gameOverOverlay?.destroy();
+      this.gameOverOverlay = null;
+      this.gameOver = false;
+      this.stageClearText?.destroy();
+      this.stageClearText = null;
+      this.removeActiveEnemies();
+      this.recalculatePlayerStats();
+      this.playerState.hp = this.playerState.maxHp;
+      this.attackCooldown = 0;
+      this.playerAttackLockedUntil = 0;
+      this.skillCooldownUntil = 0;
+      this.player.setPosition(1200, 1200);
+      this.player.setVelocity(0, 0);
+      this.player.clearTint();
+      this.player.setActive(true).setVisible(true);
+      this.player.anims.stop();
+      this.player.setTexture("warrior-idle");
+      this.playReviveEffect();
+      this.startStage();
+      this.startMonsterSpawner();
+      this.refreshUi();
+    }
+
+    playReviveEffect() {
+      const flash = this.add.circle(this.player.x, this.player.y, 28, 0xf2ca50, 0.62).setDepth(45);
+      const ring = this.add.circle(this.player.x, this.player.y, 24).setDepth(46);
+      ring.setStrokeStyle(6, 0xd3e4fe, 1);
+      const reviveText = this.add.text(this.player.x, this.player.y - 72, "부활", {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "26px",
+        color: "#fffdd0",
+        fontStyle: "800",
+        stroke: "#1a1a1b",
+        strokeThickness: 5,
+      }).setOrigin(0.5).setDepth(47);
+
+      this.tweens.add({
+        targets: flash,
+        scaleX: 4,
+        scaleY: 4,
+        alpha: 0,
+        duration: 360,
+        onComplete: () => flash.destroy(),
+      });
+      this.tweens.add({
+        targets: ring,
+        scaleX: 4.8,
+        scaleY: 4.8,
+        alpha: 0,
+        duration: 520,
+        onComplete: () => ring.destroy(),
+      });
+      this.tweens.add({
+        targets: reviveText,
+        y: this.player.y - 118,
+        alpha: 0,
+        duration: 760,
+        ease: "Cubic.easeOut",
+        onComplete: () => reviveText.destroy(),
       });
     }
 
@@ -888,6 +1558,7 @@
         this.bossMonster = null;
       }
 
+      this.maybeAutoLootEquipment(level, isBoss);
       this.gainExperience(reward);
 
       if (isBoss) {
@@ -904,7 +1575,7 @@
         // 레벨업 보너스를 적용한 뒤 파생 스탯을 다시 계산한다.
         this.playerState.level += 1;
         this.playerState.strength += 1;
-        this.playerState.levelDamageBonus += 0.4;
+        this.playerState.levelDamageBonus += 0.7;
         this.playerState.levelDefenseBonus += 0.3;
         if (this.playerState.level % 4 === 0) {
           this.playerState.dexterity += 1;

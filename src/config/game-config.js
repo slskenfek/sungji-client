@@ -14,7 +14,7 @@
       // 공격 쿨타임 기준값(ms).
       attackCooldownBase: 980,
       // 추가 보정 전 기본 데미지.
-      baseDamage: 7,
+      baseDamage: 10,
       // 기본 능력치.
       strength: 5,
       dexterity: 2,
