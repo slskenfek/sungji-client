@@ -23,6 +23,13 @@
       // 기본 자원 수치.
       maxHp: 180,
     },
+    equipment: {
+      upgradeStatRatio: 0.3,
+      bossUpgradeStatRatio: 1.2,
+      accessoryEmpoweredLevel: 5,
+      accessoryBasicAttackDamageMultiplier: 1.2,
+      accessorySplashRadius: 120,
+    },
     room: {
       // 현재 방 정보. HUD와 중앙 라벨에 함께 사용된다.
       number: 1,
@@ -30,7 +37,7 @@
       minMonsterLevel: 1,
     },
     stage: {
-      // 현재는 풀숲 스테이지 1개만 존재한다.
+      // 풀숲 지대에서 스테이지 번호가 계속 증가하는 반복 진행을 사용한다.
       number: 1,
       label: "풀숲 지대",
       // 일반 몬스터가 쏟아지는 시간(ms).
@@ -39,6 +46,14 @@
       bossXpMultiplier: 10,
       skillCooldown: 5000,
       skillRadius: 180,
+      monsterLevelPerStage: 2,
+      monsterHpMultiplierPerStage: 0.35,
+      monsterDamageMultiplierPerStage: 0.2,
+      monsterDefenseBonusPerStage: 0.15,
+      monsterSpeedMultiplierPerStage: 0.04,
+      xpRewardMultiplierPerStage: 0.25,
+      itemPowerMultiplierPerStage: 0.35,
+      spawnRateMultiplierPerStage: 0.05,
     },
     world: {
       // 월드 전체 크기. 카메라 bounds와 스폰 계산의 기준이다.

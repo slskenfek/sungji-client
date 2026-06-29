@@ -215,7 +215,7 @@
       `LV:${state.level} | EXP ${state.xp} / ${state.xpToNext} | ${skillProfile.name} ${scene.getSkillStatusText()}`
     );
     hud.roomText.setText(
-      `STAGE ${String(config.stage.number).padStart(2, "0")} | ${config.stage.label} | ${scene.getStageStatusText()}`
+      `STAGE ${String(scene.getStageNumber()).padStart(2, "0")} | ${config.stage.label} | ${scene.getStageStatusText()}`
     );
     hud.clockText.setText(scene.getClockText());
     hud.clockText.setColor(scene.bossSpawned ? "#ffb3ae" : "#fffdd0");

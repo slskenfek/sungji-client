@@ -15,6 +15,7 @@
       this.playerAttackLockedUntil = 0;
       this.skillCooldownUntil = 0;
       this.attackSpeedBuffUntil = 0;
+      this.stageNumber = config.stage.number;
       this.stageStartedAt = 0;
       this.waveEnded = false;
       this.bossSpawned = false;
@@ -22,6 +23,7 @@
       this.gameOver = false;
       this.bossMonster = null;
       this.stageClearText = null;
+      this.stageClearOverlay = null;
       this.gameOverOverlay = null;
       this.gameOverRestartBounds = null;
       this.gameOverPointerHandler = null;
@@ -286,7 +288,6 @@
     }
 
     startStage() {
-      // 현재는 풀숲 스테이지 1개만 존재하며, create 시점부터 카운트가 시작된다.
       this.stageStartedAt = this.time.now;
       this.waveEnded = false;
       this.bossSpawned = false;
@@ -295,6 +296,8 @@
       this.lastStageUiSecond = -1;
       this.stageClearText?.destroy();
       this.stageClearText = null;
+      this.stageClearOverlay?.destroy();
+      this.stageClearOverlay = null;
       this.refreshUi();
     }
 
@@ -308,7 +311,7 @@
     startMonsterSpawner() {
       // 일정 주기마다 spawnMonster를 호출하는 타이머 등록.
       this.monsterSpawner = this.time.addEvent({
-        delay: config.monsters.spawnInterval,
+        delay: this.getStageSpawnInterval(),
         loop: true,
         callback: () => {
           if (this.waveEnded || this.stageCleared) {
@@ -327,6 +330,25 @@
 
     getStageElapsedTime() {
       return Math.max(0, this.time.now - this.stageStartedAt);
+    }
+
+    getStageNumber() {
+      return this.stageNumber;
+    }
+
+    getStageScale(perStageIncrease) {
+      return 1 + Math.max(0, this.stageNumber - 1) * perStageIncrease;
+    }
+
+    getStageMinimumMonsterLevel() {
+      return config.room.minMonsterLevel + (this.stageNumber - 1) * config.stage.monsterLevelPerStage;
+    }
+
+    getStageSpawnInterval() {
+      return Math.max(
+        360,
+        Math.round(config.monsters.spawnInterval / this.getStageScale(config.stage.spawnRateMultiplierPerStage))
+      );
     }
 
     getRemainingWaveTime() {
@@ -408,14 +430,14 @@
 
     getStageWorldLabel() {
       if (this.stageCleared) {
-        return `STAGE ${String(config.stage.number).padStart(2, "0")} CLEAR`;
+        return `STAGE ${String(this.stageNumber).padStart(2, "0")} CLEAR`;
       }
 
       if (this.bossSpawned) {
         return `BOSS | ${config.stage.label}`;
       }
 
-      return `STAGE ${String(config.stage.number).padStart(2, "0")}`;
+      return `STAGE ${String(this.stageNumber).padStart(2, "0")}`;
     }
 
     updateStageFlow() {
@@ -447,24 +469,94 @@
       this.removeActiveEnemies();
 
       this.stageClearText?.destroy();
-      this.stageClearText = this.add.text(640, 360, "STAGE CLEAR!", {
+      this.stageClearText = null;
+      this.showStageClearOverlay();
+      this.refreshUi();
+    }
+
+    showStageClearOverlay() {
+      this.stageClearOverlay?.destroy();
+
+      const overlay = this.add.container(640, 360).setScrollFactor(0).setDepth(1500);
+      const dim = this.add.rectangle(0, 0, 1280, 720, 0x061008, 0.58);
+      const panel = this.add.graphics();
+      panel.fillStyle(0x1a1a1b, 0.98);
+      panel.fillRoundedRect(-260, -158, 520, 316, 16);
+      panel.fillStyle(0x1b3421, 0.98);
+      panel.fillRoundedRect(-252, -150, 504, 300, 12);
+      panel.lineStyle(3, 0xffe2ab, 0.82);
+      panel.strokeRoundedRect(-252, -150, 504, 300, 12);
+
+      const title = this.add.text(0, -92, "STAGE CLEAR!", {
         fontFamily: "Segoe UI",
         fontSize: "46px",
         color: "#fff1ad",
         fontStyle: "700",
         stroke: "#37501f",
         strokeThickness: 8,
-      }).setScrollFactor(0).setDepth(1200).setOrigin(0.5);
+      }).setOrigin(0.5);
+      const rewardText = this.add.text(
+        0,
+        -28,
+        `STAGE ${this.stageNumber} 완료\n장비·인벤토리·레벨이 다음 스테이지에 유지됩니다`,
+        {
+          fontFamily: "Plus Jakarta Sans, Segoe UI",
+          fontSize: "17px",
+          color: "#d9f3c5",
+          fontStyle: "700",
+          align: "center",
+          lineSpacing: 8,
+        }
+      ).setOrigin(0.5);
+      const nextButtonBg = this.add.rectangle(0, 76, 292, 60, 0xffbf00, 1)
+        .setStrokeStyle(3, 0x1a1a1b, 1)
+        .setInteractive({ useHandCursor: true });
+      const nextButton = this.add.text(0, 76, "다음 스테이지 넘어가기", {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "19px",
+        color: "#402d00",
+        fontStyle: "800",
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-      this.tweens.add({
-        targets: this.stageClearText,
-        scaleX: 1.06,
-        scaleY: 1.06,
-        yoyo: true,
-        repeat: -1,
-        duration: 700,
-      });
+      const setButtonScale = (scale) => {
+        nextButtonBg.setScale(scale);
+        nextButton.setScale(scale);
+      };
+      const goNext = () => this.goToNextStage();
+      nextButtonBg.on("pointerover", () => setButtonScale(1.04));
+      nextButtonBg.on("pointerout", () => setButtonScale(1));
+      nextButtonBg.on("pointerdown", goNext);
+      nextButton.on("pointerover", () => setButtonScale(1.04));
+      nextButton.on("pointerout", () => setButtonScale(1));
+      nextButton.on("pointerdown", goNext);
 
+      overlay.add([dim, panel, title, rewardText, nextButtonBg, nextButton]);
+      this.stageClearOverlay = overlay;
+    }
+
+    goToNextStage() {
+      if (this.gameOver || !this.stageCleared) {
+        return;
+      }
+
+      this.monsterSpawner?.remove(false);
+      this.stageClearOverlay?.destroy();
+      this.stageClearOverlay = null;
+      this.stageNumber += 1;
+      this.removeActiveEnemies();
+      this.recalculatePlayerStats();
+      this.playerState.hp = this.playerState.maxHp;
+      this.attackCooldown = 0;
+      this.playerAttackLockedUntil = 0;
+      this.skillCooldownUntil = 0;
+      this.attackSpeedBuffUntil = 0;
+      this.player.setPosition(1200, 1200);
+      this.player.setVelocity(0, 0);
+      this.player.clearTint();
+      this.player.anims.stop();
+      this.player.setTexture("warrior-idle");
+      this.startStage();
+      this.startMonsterSpawner();
       this.refreshUi();
     }
 
@@ -539,8 +631,10 @@
       const distance = Phaser.Math.Between(config.monsters.spawnRadiusMin, config.monsters.spawnRadiusMax);
       const spawnX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 100, config.world.width - 100);
       const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 100, config.world.height - 100);
-      const monsterLevel = leveling.getMonsterLevel(this.playerState.level, config.room.minMonsterLevel);
-      const monsterMaxHp = leveling.getMonsterMaxHp(monsterLevel);
+      const monsterLevel = leveling.getMonsterLevel(this.playerState.level, this.getStageMinimumMonsterLevel());
+      const monsterMaxHp = Math.round(
+        leveling.getMonsterMaxHp(monsterLevel) * this.getStageScale(config.stage.monsterHpMultiplierPerStage)
+      );
 
       const variant = this.getMonsterVariantByLevel(monsterLevel);
       const monster = this.physics.add.sprite(spawnX, spawnY, `monster-${variant}-idle`);
@@ -550,10 +644,20 @@
       monster.setData("variant", variant);
       monster.setData("speciesName", this.getMonsterSpeciesName(variant));
       monster.setData("level", monsterLevel);
-      monster.setData("defenseMultiplier", leveling.getMonsterDefenseMultiplier(monsterLevel));
+      monster.setData(
+        "defenseMultiplier",
+        leveling.getMonsterDefenseMultiplier(monsterLevel) +
+          (this.stageNumber - 1) * config.stage.monsterDefenseBonusPerStage
+      );
       monster.setData("hp", monsterMaxHp);
       monster.setData("maxHp", monsterMaxHp);
-      monster.setData("speed", Phaser.Math.Between(config.monsters.speedMin, config.monsters.speedMax));
+      monster.setData(
+        "speed",
+        Math.round(
+          Phaser.Math.Between(config.monsters.speedMin, config.monsters.speedMax) *
+            this.getStageScale(config.stage.monsterSpeedMultiplierPerStage)
+        )
+      );
       monster.setData("attackRange", Phaser.Math.Between(config.monsters.attackRangeMin, config.monsters.attackRangeMax));
       monster.setData("nextShotAt", this.time.now + Phaser.Math.Between(config.monsters.attackIntervalMin, config.monsters.attackIntervalMax));
 
@@ -642,13 +746,16 @@
       const levelPower = isBoss
         ? Math.max(40, Math.round(Math.pow(Math.max(1, level), 1.7) * 14))
         : Math.max(1, Math.round(Math.pow(Math.max(1, level), 1.35) * rarityPower));
+      const scaledLevelPower = Math.round(
+        levelPower * this.getStageScale(config.stage.itemPowerMultiplierPerStage)
+      );
       const templates = [
-        { type: "weapon", name: "전사의 검", stats: { damage: 4 + levelPower * 2, strength: Math.ceil(levelPower / 3) } },
-        { type: "shoes", name: "가죽 신발", stats: { dexterity: 1 + Math.ceil(levelPower / 2), defense: Math.ceil(levelPower / 4) } },
-        { type: "armor", name: "은빛 갑옷", stats: { defense: 3 + levelPower, strength: Math.ceil(levelPower / 4) } },
-        { type: "helmet", name: "강철 투구", stats: { defense: 2 + levelPower, knowledge: Math.ceil(levelPower / 5) } },
-        { type: "accessory", name: "번개의 반지", stats: { damage: 1 + levelPower, dexterity: Math.ceil(levelPower / 3) } },
-        { type: "accessory", name: "푸른 보석 목걸이", stats: { knowledge: Math.ceil(levelPower / 2), damage: Math.ceil(levelPower / 2) } },
+        { type: "weapon", name: "전사의 검", stats: { damage: 4 + scaledLevelPower * 2, strength: Math.ceil(scaledLevelPower / 3) } },
+        { type: "shoes", name: "가죽 신발", stats: { dexterity: 1 + Math.ceil(scaledLevelPower / 2), defense: Math.ceil(scaledLevelPower / 4) } },
+        { type: "armor", name: "은빛 갑옷", stats: { defense: 3 + scaledLevelPower, strength: Math.ceil(scaledLevelPower / 4) } },
+        { type: "helmet", name: "강철 투구", stats: { defense: 2 + scaledLevelPower, knowledge: Math.ceil(scaledLevelPower / 5) } },
+        { type: "accessory", name: "번개의 반지", stats: { damage: 1 + scaledLevelPower, dexterity: Math.ceil(scaledLevelPower / 3) } },
+        { type: "accessory", name: "푸른 보석 목걸이", stats: { knowledge: Math.ceil(scaledLevelPower / 2), damage: Math.ceil(scaledLevelPower / 2) } },
       ];
       const template = Phaser.Utils.Array.GetRandom(templates);
 
@@ -660,6 +767,8 @@
         type: template.type,
         level,
         rarity,
+        isBossDrop: isBoss,
+        acquiredStage: this.stageNumber,
         stats: template.stats,
         baseStats: { ...template.stats },
       };
@@ -671,7 +780,7 @@
         return;
       }
 
-      if (this.tryUpgradeSameAccessory(nextItem, index)) {
+      if (this.tryUpgradeSameEquipment(nextItem, index)) {
         return;
       }
 
@@ -692,24 +801,22 @@
       this.refreshUi();
     }
 
-    tryUpgradeSameAccessory(nextItem, inventoryIndex) {
-      if (nextItem.type !== "accessory") {
-        return false;
-      }
-
-      const sameSlotKey = ["accessory1", "accessory2"].find((slotKey) => {
-        const equippedItem = this.playerState.equippedItems[slotKey];
-        return this.getNormalizedItemName(equippedItem) === this.getNormalizedItemName(nextItem);
-      });
+    tryUpgradeSameEquipment(nextItem, inventoryIndex) {
+      const sameSlotKey = this.findUpgradeableEquipmentSlot(nextItem);
 
       if (!sameSlotKey) {
         return false;
       }
 
       const equippedItem = this.playerState.equippedItems[sameSlotKey];
+      const upgradeRatio = nextItem.isBossDrop
+        ? config.equipment.bossUpgradeStatRatio
+        : config.equipment.upgradeStatRatio;
       equippedItem.upgradeLevel = (equippedItem.upgradeLevel || 0) + 1;
       Object.entries(nextItem.stats).forEach(([key, value]) => {
-        equippedItem.stats[key] = Number(((equippedItem.stats[key] || 0) + value * 0.3).toFixed(2));
+        equippedItem.stats[key] = Number(
+          ((equippedItem.stats[key] || 0) + value * upgradeRatio).toFixed(2)
+        );
       });
       equippedItem.name = this.getUpgradedItemName(equippedItem);
 
@@ -718,6 +825,19 @@
       this.playerState.hp = Math.min(this.playerState.hp, this.playerState.maxHp);
       this.refreshUi();
       return true;
+    }
+
+    findUpgradeableEquipmentSlot(nextItem) {
+      if (nextItem.type === "accessory") {
+        return ["accessory1", "accessory2"].find((slotKey) => {
+          return this.playerState.equippedItems[slotKey]?.type === nextItem.type;
+        });
+      }
+
+      const equippedItem = this.playerState.equippedItems[nextItem.type];
+      return this.getNormalizedItemName(equippedItem) === this.getNormalizedItemName(nextItem)
+        ? nextItem.type
+        : null;
     }
 
     getUpgradedItemName(item) {
@@ -772,7 +892,9 @@
         const title = document.createElement("strong");
         title.textContent = item ? item.name : `${slot.label} 비어있음`;
         const stats = document.createElement("span");
-        const effectLabel = item?.type === "accessory" ? "중복 +30% 강화" : "장착 적용";
+        const effectLabel = item?.type === "accessory"
+          ? `동일 타입 +30% 강화${item.upgradeLevel >= config.equipment.accessoryEmpoweredLevel ? " | 화염 스플래시 +20%" : ""}`
+          : "동일 장비 +30% 강화";
         stats.textContent = item ? `${this.getItemTypeLabel(item)} ${effectLabel} | ${this.formatItemStats(item)}` : "더블클릭 장착";
 
         body.append(title, stats);
@@ -802,7 +924,8 @@
         const name = document.createElement("strong");
         name.textContent = item.name;
         const stats = document.createElement("span");
-        stats.textContent = `${this.getItemTypeLabel(item)} | LV${item.level} | ${this.formatItemStats(item)}`;
+        const sourceLabel = item.isBossDrop ? "보스 장비 · 강화 120%" : `STAGE ${item.acquiredStage || 1}`;
+        stats.textContent = `${this.getItemTypeLabel(item)} | ${sourceLabel} | LV${item.level} | ${this.formatItemStats(item)}`;
 
         body.append(name, stats);
         row.append(icon, body);
@@ -878,12 +1001,17 @@
       const distance = Phaser.Math.Between(420, 560);
       const spawnX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 120, config.world.width - 120);
       const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 120, config.world.height - 120);
-      const bossLevel = Math.max(config.room.minMonsterLevel, this.playerState.level + 2);
+      const bossLevel = Math.max(this.getStageMinimumMonsterLevel(), this.playerState.level + 2);
       const bossProfile = this.getBossProfile(bossLevel);
       const bossBaseHp = leveling.getMonsterMaxHp(bossLevel);
       const bossMaxHp = Math.max(
         220,
-        Math.round(bossBaseHp * config.monsters.bossHpMultiplier * bossProfile.hpMultiplier)
+        Math.round(
+          bossBaseHp *
+            config.monsters.bossHpMultiplier *
+            bossProfile.hpMultiplier *
+            this.getStageScale(config.stage.monsterHpMultiplierPerStage)
+        )
       );
 
       const boss = this.physics.add.sprite(spawnX, spawnY, "boss-idle");
@@ -896,9 +1024,22 @@
       boss.setData("level", bossLevel);
       boss.setData("hp", bossMaxHp);
       boss.setData("maxHp", bossMaxHp);
-      boss.setData("speed", Math.round(config.monsters.speedMax * config.monsters.bossSpeedMultiplier * bossProfile.speedMultiplier));
+      boss.setData(
+        "speed",
+        Math.round(
+          config.monsters.speedMax *
+            config.monsters.bossSpeedMultiplier *
+            bossProfile.speedMultiplier *
+            this.getStageScale(config.stage.monsterSpeedMultiplierPerStage)
+        )
+      );
       boss.setData("attackRange", config.monsters.attackRangeMax + 70);
-      boss.setData("defenseMultiplier", leveling.getMonsterDefenseMultiplier(bossLevel) + bossProfile.defenseBonus);
+      boss.setData(
+        "defenseMultiplier",
+        leveling.getMonsterDefenseMultiplier(bossLevel) +
+          bossProfile.defenseBonus +
+          (this.stageNumber - 1) * config.stage.monsterDefenseBonusPerStage
+      );
       boss.setData("nextShotAt", this.time.now + 900);
 
       const hpBar = this.add.graphics().setDepth(34);
@@ -973,7 +1114,7 @@
     }
 
     updatePlayerMovement(time) {
-      if (this.gameOver) {
+      if (this.gameOver || this.stageCleared) {
         this.player.setVelocity(0, 0);
         this.player.anims.stop();
         return;
@@ -1140,13 +1281,18 @@
       // 투사체 생성 -> 속도 부여 -> group 등록 순서.
       const projectile = this.physics.add.image(monster.x, monster.y - 4, "enemy-shot");
       const isBoss = monster.getData("isBoss");
+      const stageDamageMultiplier = this.getStageScale(config.stage.monsterDamageMultiplierPerStage);
       projectile.setDepth(24);
       projectile.setScale(isBoss ? 1.4 : 1);
       projectile.setData(
         "damage",
         isBoss
-          ? Math.round((config.monsters.projectileDamage + monster.getData("level") * 2) * config.monsters.bossProjectileDamageMultiplier)
-          : config.monsters.projectileDamage + monster.getData("level") * 2
+          ? Math.round(
+              (config.monsters.projectileDamage + monster.getData("level") * 2) *
+                config.monsters.bossProjectileDamageMultiplier *
+                stageDamageMultiplier
+            )
+          : Math.round((config.monsters.projectileDamage + monster.getData("level") * 2) * stageDamageMultiplier)
       );
       projectile.setData("spawnedAt", this.time.now);
       projectile.setData("speed", config.monsters.projectileSpeed);
@@ -1202,7 +1348,31 @@
       this.playerAttackLockedUntil = time + 140;
 
       this.playMeleeAttack(target);
+      if (this.hasEmpoweredAccessory()) {
+        this.handleEmpoweredBasicAttack(target);
+        return;
+      }
+
       this.damageMonster(target, this.playerState.damage);
+    }
+
+    hasEmpoweredAccessory() {
+      return ["accessory1", "accessory2"].some((slotKey) => {
+        const item = this.playerState.equippedItems[slotKey];
+        return item?.type === "accessory" && item.upgradeLevel >= config.equipment.accessoryEmpoweredLevel;
+      });
+    }
+
+    handleEmpoweredBasicAttack(target) {
+      const impactX = target.x;
+      const impactY = target.y;
+      const damage = this.playerState.damage * config.equipment.accessoryBasicAttackDamageMultiplier;
+      const splashTargets = this.monsters.getChildren().filter((monster) => {
+        return monster.active && Phaser.Math.Distance.Between(impactX, impactY, monster.x, monster.y) <= config.equipment.accessorySplashRadius;
+      });
+
+      this.playFireSplashEffect(impactX, impactY);
+      splashTargets.forEach((monster) => this.damageMonster(monster, damage));
     }
 
     handleSkillCast(time) {
@@ -1297,6 +1467,54 @@
         } else {
           this.player.setTexture("warrior-idle");
         }
+      });
+    }
+
+    playFireSplashEffect(x, y) {
+      const core = this.add.circle(x, y, 20, 0xff6d2d, 0.88).setDepth(42);
+      const glow = this.add.circle(x, y, 30, 0xffbf00, 0.42).setDepth(41);
+      const ring = this.add.circle(x, y, config.equipment.accessorySplashRadius * 0.35).setDepth(43);
+      ring.setStrokeStyle(6, 0xff8a2b, 0.95);
+
+      Array.from({ length: 7 }, (_, index) => {
+        const angle = (Math.PI * 2 * index) / 7;
+        const flame = this.add.circle(x, y, 8, index % 2 === 0 ? 0xffbf00 : 0xff4f1f, 0.9).setDepth(44);
+        this.tweens.add({
+          targets: flame,
+          x: x + Math.cos(angle) * config.equipment.accessorySplashRadius * 0.72,
+          y: y + Math.sin(angle) * config.equipment.accessorySplashRadius * 0.72 - 16,
+          scaleX: 0.25,
+          scaleY: 1.8,
+          alpha: 0,
+          duration: 280,
+          ease: "Cubic.easeOut",
+          onComplete: () => flame.destroy(),
+        });
+      });
+
+      this.tweens.add({
+        targets: core,
+        scaleX: 3.5,
+        scaleY: 3.5,
+        alpha: 0,
+        duration: 260,
+        onComplete: () => core.destroy(),
+      });
+      this.tweens.add({
+        targets: glow,
+        scaleX: 4,
+        scaleY: 4,
+        alpha: 0,
+        duration: 330,
+        onComplete: () => glow.destroy(),
+      });
+      this.tweens.add({
+        targets: ring,
+        scaleX: 2.9,
+        scaleY: 2.9,
+        alpha: 0,
+        duration: 320,
+        onComplete: () => ring.destroy(),
       });
     }
 
@@ -1548,7 +1766,11 @@
       const levelText = monster.getData("levelText");
       const level = monster.getData("level");
       const isBoss = monster.getData("isBoss");
-      const reward = leveling.getMonsterXpReward(level) * (isBoss ? config.stage.bossXpMultiplier : 1);
+      const reward = Math.round(
+        leveling.getMonsterXpReward(level) *
+          (isBoss ? config.stage.bossXpMultiplier : 1) *
+          this.getStageScale(config.stage.xpRewardMultiplierPerStage)
+      );
 
       hpBar?.destroy();
       levelText?.destroy();
