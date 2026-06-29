@@ -4,10 +4,73 @@
   function createTextures(scene) {
     // Scene preload() 단계에서 한 번 호출되어 모든 텍스처 key를 등록한다.
     createWarriorTextures(scene);
+    createGladiatorTextures(scene);
     createMonsterTextures(scene);
     createBossTextures(scene);
     createEffectTextures(scene);
     createTerrainTextures(scene);
+  }
+
+  function createGladiatorTextures(scene) {
+    ["idle", "move-a", "move-b", "attack"].forEach((pose) => {
+      const graphics = scene.make.graphics({ x: 0, y: 0, add: false });
+      drawWarriorTexture(graphics, pose);
+      drawGladiatorOffhandSword(graphics, pose);
+      graphics.generateTexture(`gladiator-${pose}`, 64, 64);
+      graphics.destroy();
+
+      const fireGraphics = scene.make.graphics({ x: 0, y: 0, add: false });
+      drawWarriorTexture(fireGraphics, pose);
+      drawGladiatorOffhandSword(fireGraphics, pose);
+      drawFlamingGladiatorSwords(fireGraphics, pose);
+      fireGraphics.generateTexture(`gladiator-fire-${pose}`, 64, 64);
+      fireGraphics.destroy();
+    });
+  }
+
+  function drawFlamingGladiatorSwords(graphics, pose) {
+    const attacking = pose === "attack";
+    const mainX = 47 + (pose === "move-a" ? 1 : pose === "move-b" ? -1 : attacking ? 8 : 0);
+    const mainY = attacking ? 17 : 28;
+    const offX = attacking ? 8 : 14 + (pose === "move-a" ? -1 : pose === "move-b" ? 1 : 0);
+    const offY = attacking ? 14 : 29;
+
+    [
+      [mainX, mainY],
+      [offX, offY],
+    ].forEach(([x, y]) => {
+      graphics.fillStyle(0xff2f1f, 1);
+      graphics.fillRect(x, y, 4, 20);
+      graphics.fillStyle(0xffd04a, 1);
+      graphics.fillRect(x + 1, y + 2, 2, 15);
+      graphics.fillStyle(0xff541f, 0.95);
+      graphics.fillTriangle(x + 2, y - 9, x - 4, y + 2, x + 8, y + 2);
+      graphics.fillStyle(0xffc629, 0.9);
+      graphics.fillTriangle(x + 2, y - 5, x - 1, y + 3, x + 5, y + 3);
+    });
+  }
+
+  function drawGladiatorOffhandSword(graphics, pose) {
+    const attacking = pose === "attack";
+    const moveOffset = pose === "move-a" ? -1 : pose === "move-b" ? 1 : 0;
+    const swordX = attacking ? 8 : 14 + moveOffset;
+    const swordY = attacking ? 14 : 29;
+
+    // 기존 방패 위에 두 번째 검과 황금 장식을 그려 검투사 실루엣을 만든다.
+    graphics.fillStyle(0x20283a, 1);
+    graphics.fillRoundedRect(10, 33, 14, 19, 5);
+    graphics.fillStyle(0xe7edf5, 1);
+    graphics.fillRect(swordX, swordY, 4, 21);
+    graphics.fillStyle(0xffffff, 1);
+    graphics.fillTriangle(swordX + 2, swordY - 7, swordX - 3, swordY, swordX + 7, swordY);
+    graphics.fillStyle(0xffd35c, 1);
+    graphics.fillRect(swordX - 2, swordY + 18, 8, 3);
+    graphics.fillStyle(0x7b5536, 1);
+    graphics.fillRect(swordX, swordY + 21, 4, 6);
+    graphics.fillStyle(0xffef9f, 0.95);
+    graphics.fillCircle(11, 10, 2);
+    graphics.fillCircle(54, 17, 2);
+    graphics.fillCircle(8, 45, 1.5);
   }
 
   function createWarriorTextures(scene) {

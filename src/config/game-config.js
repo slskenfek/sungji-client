@@ -22,10 +22,45 @@
       defense: 7,
       // 기본 자원 수치.
       maxHp: 180,
+      promotion: {
+        requiredLevel: 26,
+        classLabel: "검투사",
+        secondJobRequiredLevel: 25,
+        secondJobClassLabel: "검투사 2차",
+        secondJobStrengthMultiplier: 100,
+        secondJobDexterityMultiplier: 50,
+        secondJobKnowledgeMultiplier: 10,
+        strengthMultiplier: 6,
+        dexterityMultiplier: 10,
+        knowledgeMultiplier: 5,
+        damageMultiplier: 2,
+        moveSpeedMultiplier: 3,
+        attackRangeMultiplier: 2,
+        impactRequiredLevel: 10,
+        impactFeedbackCooldown: 160,
+        impactHitStopDuration: 35,
+        criticalChance: 0.1,
+        criticalDamageMultiplier: 2,
+        criticalHitStopDuration: 55,
+        guaranteedCriticalDuration: 2000,
+        chainLightningDamageRatio: 0.3,
+        chainLightningRadius: 180,
+        demonModeCooldown: 10000,
+        demonModeDuration: 5000,
+        demonModeAttackSpeedMultiplier: 4,
+        demonModeMoveSpeedMultiplier: 1.2,
+        demonModeLifeStealRatio: 0.2,
+      },
     },
     equipment: {
+      upgradeSuccessRate: 0.25,
       upgradeStatRatio: 0.3,
       bossUpgradeStatRatio: 1.2,
+      finalBossUpgradeStatRatio: 1.5,
+      finalWeaponDamageMultiplier: 3,
+      finalShoesMoveSpeedMultiplier: 2,
+      finalAccessorySplashDamageRatio: 1.2,
+      finalArmorPhysicalDamageReduction: 0.1,
       accessoryEmpoweredLevel: 5,
       accessoryBasicAttackDamageMultiplier: 1.2,
       accessorySplashRadius: 120,
@@ -43,7 +78,7 @@
       // 일반 몬스터가 쏟아지는 시간(ms).
       waveDuration: 60000,
       // 보스 처치 시 일반 몬스터 대비 몇 배의 경험치를 줄지.
-      bossXpMultiplier: 10,
+      bossXpMultiplier: 4,
       skillCooldown: 5000,
       skillRadius: 180,
       monsterLevelPerStage: 2,
@@ -54,6 +89,12 @@
       xpRewardMultiplierPerStage: 0.25,
       itemPowerMultiplierPerStage: 0.35,
       spawnRateMultiplierPerStage: 0.05,
+      milestoneBossStageInterval: 6,
+      milestoneBossHpMultiplier: 5,
+      milestoneBossDamageMultiplier: 1.2,
+      finalBossHpMultiplier: 10,
+      finalBossDamageMultiplier: 2,
+      finalBossScaleMultiplier: 1.45,
     },
     world: {
       // 월드 전체 크기. 카메라 bounds와 스폰 계산의 기준이다.
@@ -62,7 +103,7 @@
     },
     monsters: {
       // 동시에 살아있을 수 있는 몬스터 수.
-      maxAlive: 18,
+      maxAlive: 30,
       spawnInterval: 950,
       // 일반 몬스터 체력 공식: baseHp + (level - 1) * hpPerLevel
       baseHp: 30,
@@ -84,13 +125,15 @@
       // 보스 능력치 배율.
       bossHpMultiplier: 36,
       bossSpeedMultiplier: 0.82,
-      bossProjectileDamageMultiplier: 2.4,
+      bossProjectileDamageMultiplier: 1.7,
       bossScale: 1.8,
     },
     progression: {
       // 경험치 계산 기준값.
       baseXpToNext: 28,
       xpRewardBase: 12,
+      normalKillMaxXpRatio: 0.35,
+      bossKillMaxXpRatio: 1,
     },
   };
 })(window);

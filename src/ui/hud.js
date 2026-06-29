@@ -202,7 +202,8 @@
 
     // Scene의 현재 상태 스냅샷(playerState)을 실제 표시용 문자열로 바꾼다.
     hud.titleText.setText("능력치");
-    hud.classText.setText(`${config.player.classLabel} | LV ${state.level}`);
+    const classLabel = scene.getPlayerClassLabel();
+    hud.classText.setText(`${classLabel} | LV ${state.level}`);
     hud.attackTierText.setText(`공속 단계: ${formatStat(state.attackRateStage)}`);
     hud.attackSpeedText.setText(`공격속도: ${formatStat(effectiveAttackSpeed)}`);
     hud.damageText.setText(`데미지: ${formatStat(state.damage)}`);
@@ -224,7 +225,7 @@
 
     drawBar(hud.hpBar, 110, 227, 194, hpRatio, 0x1a1a1b, 0xff6d62);
     drawBar(hud.xpBar, 110, 249, 194, xpRatio, 0x1a1a1b, 0x79d0ff);
-    refreshStatsPanel(config, state, effectiveAttackSpeed);
+    refreshStatsPanel(config, state, effectiveAttackSpeed, classLabel);
   }
 
   function drawBar(graphics, x, y, width, ratio, bgColor, fillColor) {
@@ -243,9 +244,10 @@
     return Number.isInteger(value) ? `${value}` : value.toFixed(2);
   }
 
-  function refreshStatsPanel(config, state, effectiveAttackSpeed) {
+  function refreshStatsPanel(config, state, effectiveAttackSpeed, classLabel) {
     // 캔버스 HUD 외에 HTML 패널에도 같은 값을 동기화한다.
-    setPanelText("stat-class", config.player.classLabel);
+    setPanelText("stat-class", classLabel);
+    setPanelText("character-class", classLabel);
     setPanelText("stat-level", state.level);
     setPanelText("stat-attack-tier", formatStat(state.attackRateStage));
     setPanelText("stat-attack-speed", formatStat(effectiveAttackSpeed));
