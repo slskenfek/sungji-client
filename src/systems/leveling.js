@@ -3,9 +3,13 @@
 (function attachLeveling(global) {
   const config = global.DungeonConfig;
 
-  function getXpToNext(level) {
-    // 레벨이 올라갈수록 필요 경험치가 빠르게 증가하도록 level^2 공식을 사용한다.
-    return config.progression.baseXpToNext * level * level;
+  function getXpToNext(level, progressionMultiplier = 1) {
+    // 레벨 자체의 가파른 곡선과 전직 단계 배율을 함께 적용한다.
+    return Math.ceil(
+      config.progression.baseXpToNext *
+        Math.pow(level, config.progression.xpLevelExponent) *
+        progressionMultiplier
+    );
   }
 
   function getMonsterLevel(playerLevel, roomMinLevel) {

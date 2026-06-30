@@ -23,7 +23,14 @@
             <p class="eyebrow">Forest Guardian</p>
             <div class="game-title-row">
               <h1>성지키기</h1>
-              <button id="summon-final-boss" class="final-boss-button" type="button">최종 보스 소환</button>
+              <div class="boss-actions">
+                <button id="awakening-challenge" class="boss-button awakening" type="button">각성 도전</button>
+                <button id="summon-final-boss" class="boss-button final" type="button">최종 보스 소환</button>
+                <button class="boss-button fire" data-supreme-boss="fire" type="button">불의 최강 보스</button>
+                <button class="boss-button water" data-supreme-boss="water" type="button">물의 최강 보스</button>
+                <button class="boss-button earth" data-supreme-boss="earth" type="button">대지의 최강 보스</button>
+                <button class="boss-button wind" data-supreme-boss="wind" type="button">바람의 최강 보스</button>
+              </div>
             </div>
           </div>
           <div class="topbar-metrics">
@@ -38,12 +45,40 @@
           </div>
         </header>
         <div id="game-root"></div>
-        <div class="command-dock">
-          <div class="dock-slot">Q</div>
-          <div class="dock-slot">W</div>
-          <div class="dock-slot">E</div>
-          <div class="dock-slot">R</div>
-          <div class="dock-slot primary">CTRL</div>
+        <section class="equipment-dock" aria-label="장비 장착">
+          <div class="equipment-dock-header">
+            <div>
+              <p class="eyebrow">EQUIPMENT</p>
+              <h2>장비 장착</h2>
+            </div>
+            <span>가방의 장비를 더블클릭해 장착·강화</span>
+          </div>
+          <div class="equipment-slots" id="equipment-slots"></div>
+        </section>
+        <div class="below-game-panels">
+          <section class="card player-status-card below-game-status">
+            <h2>플레이어 상태</h2>
+            <div class="status-meter hp">
+              <div class="status-meter-label">
+                <span>HP</span>
+                <strong id="player-hp-text">180 / 180</strong>
+              </div>
+              <div class="status-meter-track"><i id="player-hp-bar"></i></div>
+            </div>
+            <div class="status-meter xp">
+              <div class="status-meter-label">
+                <span>EXP</span>
+                <strong id="player-xp-text">0 / 28</strong>
+              </div>
+              <div class="status-meter-track"><i id="player-xp-bar"></i></div>
+            </div>
+          </section>
+          <section class="card inventory-card below-game-inventory">
+            <h2>가방</h2>
+            <div class="inventory-list" id="inventory-list">
+              <div class="inventory-empty">획득한 장비 없음</div>
+            </div>
+          </section>
         </div>
       </main>
 
@@ -54,14 +89,12 @@
           <span>자동 전투 생존 진행 중</span>
         </section>
 
-        <section class="card">
-          <h2>컨트롤</h2>
-          <ul>
-            <li><span>이동</span><strong>WASD / 방향키</strong></li>
-            <li><span>전력질주</span><strong>Shift</strong></li>
-            <li><span>스킬</span><strong>CTRL</strong></li>
-            <li><span>기본공격</span><strong>자동</strong></li>
-          </ul>
+        <section class="card skill-panel-card">
+          <h2>스킬</h2>
+          <div class="skill-counter ready" id="skill-counter">
+            <span>CTRL 스킬</span>
+            <strong id="player-skill-status">사용 가능</strong>
+          </div>
         </section>
 
         <section class="card">
@@ -76,16 +109,8 @@
             <li><span>덱스</span><strong id="stat-dexterity">2</strong></li>
             <li><span>지식</span><strong id="stat-knowledge">1</strong></li>
             <li><span>방어</span><strong id="stat-defense">7</strong></li>
+            <li><span>각성</span><strong id="stat-awakening">미각성</strong></li>
           </ul>
-        </section>
-
-        <section class="card inventory-card">
-          <h2>장비 장착</h2>
-          <div class="equipment-slots" id="equipment-slots"></div>
-          <h2>가방</h2>
-          <div class="inventory-list" id="inventory-list">
-            <div class="inventory-empty">획득한 장비 없음</div>
-          </div>
         </section>
 
         <section class="card">
@@ -95,6 +120,18 @@
             <li><span>LV2</span><strong>멧돼지 새끼</strong></li>
             <li><span>LV3+</span><strong>박쥐 고양이</strong></li>
             <li><span>BOSS</span><strong>숲의 수호자</strong></li>
+            <li><span>AWAKE</span><strong>각성의 심판자 · HP 800만</strong></li>
+            <li><span>SUPREME</span><strong>4대 속성 최강 보스 · HP 2억 5천만</strong></li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <h2>컨트롤</h2>
+          <ul>
+            <li><span>이동</span><strong>WASD / 방향키</strong></li>
+            <li><span>전력질주</span><strong>Shift</strong></li>
+            <li><span>스킬</span><strong>CTRL</strong></li>
+            <li><span>기본공격</span><strong>자동</strong></li>
           </ul>
         </section>
 

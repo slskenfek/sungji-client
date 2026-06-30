@@ -19,7 +19,12 @@
       this.guaranteedCriticalUntil = 0;
       this.lastPlayerVisualState = null;
       this.lastHeavyImpactAt = Number.NEGATIVE_INFINITY;
+      this.lastCriticalImpactAt = Number.NEGATIVE_INFINITY;
+      this.lastBleedingImpactAt = Number.NEGATIVE_INFINITY;
+      this.lastChainEffectAt = Number.NEGATIVE_INFINITY;
+      this.lastMeleeVisualAt = Number.NEGATIVE_INFINITY;
       this.lastCombatHudRefreshAt = Number.NEGATIVE_INFINITY;
+      this.lastStatusCounterRefreshAt = Number.NEGATIVE_INFINITY;
       this.lastPlayerLevelLabel = null;
       this.hitStopEvent = null;
       this.stageNumber = config.stage.number;
@@ -40,11 +45,21 @@
       this.finalBossActive = false;
       this.finalBossButton = null;
       this.finalBossButtonHandler = null;
+      this.awakeningButton = null;
+      this.specialBossButtons = [];
+      this.activeSpecialBossType = null;
+      this.lastInfernoBurnAt = Number.NEGATIVE_INFINITY;
+      this.waterDotUntil = 0;
+      this.nextWaterDotAt = 0;
       this.activeLegendaryEffects = {
         flameWeapon: false,
         wingedShoes: false,
         empoweredSplash: false,
         physicalGuard: false,
+        infernoWeapon: false,
+        tidalHelmet: false,
+        titanArmor: false,
+        tempestShoes: false,
       };
       // 플레이어의 현재 상태 스냅샷.
       // 전투 계산과 HUD 갱신이 모두 이 객체를 기준으로 이뤄진다.
@@ -66,6 +81,7 @@
         levelDefenseBonus: 0,
         isGladiator: false,
         isGladiatorSecondJob: false,
+        isAwakened: false,
         equippedItems: {
           weapon: null,
           shoes: null,
@@ -95,6 +111,7 @@
       this.createUi();
       this.registerInputs();
       this.registerFinalBossButton();
+      this.registerSpecialBossButtons();
       this.startStage();
       this.startMonsterSpawner();
     }
@@ -370,6 +387,7 @@
       this.stageCleared = false;
       this.bossMonster = null;
       this.finalBossActive = false;
+      this.activeSpecialBossType = null;
       this.lastStageUiSecond = -1;
       this.stageClearText?.destroy();
       this.stageClearText = null;
@@ -377,6 +395,7 @@
       this.stageClearOverlay = null;
       this.refreshUi();
       this.updateFinalBossButton();
+      this.updateSpecialBossButtons();
     }
 
     registerInputs() {
@@ -400,6 +419,47 @@
       this.updateFinalBossButton();
     }
 
+    registerSpecialBossButtons() {
+      this.awakeningButton = document.getElementById("awakening-challenge");
+      const awakeningHandler = () => this.summonSpecialBoss("awakening");
+      this.awakeningButton?.addEventListener("click", awakeningHandler);
+
+      this.specialBossButtons = Array.from(document.querySelectorAll("[data-supreme-boss]"));
+      const supremeHandlers = this.specialBossButtons.map((button) => {
+        const handler = () => this.summonSpecialBoss(button.dataset.supremeBoss);
+        button.addEventListener("click", handler);
+        return { button, handler };
+      });
+
+      this.events.once("shutdown", () => {
+        this.awakeningButton?.removeEventListener("click", awakeningHandler);
+        supremeHandlers.forEach(({ button, handler }) => button.removeEventListener("click", handler));
+      });
+      this.updateSpecialBossButtons();
+    }
+
+    updateSpecialBossButtons() {
+      const battleLocked = this.gameOver || this.stageCleared || this.bossSpawned;
+      if (this.awakeningButton) {
+        const eligible = this.playerState.isGladiatorSecondJob && !this.playerState.isAwakened;
+        this.awakeningButton.disabled = battleLocked || !eligible;
+        this.awakeningButton.textContent = this.playerState.isAwakened
+          ? "각성 완료"
+          : this.activeSpecialBossType === "awakening"
+            ? "각성 도전 중"
+            : eligible ? "각성 도전" : "2차 환생 필요";
+      }
+      this.specialBossButtons.forEach((button) => {
+        const type = button.dataset.supremeBoss;
+        button.disabled = battleLocked;
+        if (this.activeSpecialBossType === type) {
+          button.textContent = `${this.getSupremeBossProfile(type).label} 전투 중`;
+        } else {
+          button.textContent = `${this.getSupremeBossProfile(type).label} 최강 보스`;
+        }
+      });
+    }
+
     updateFinalBossButton() {
       if (!this.finalBossButton) {
         return;
@@ -411,6 +471,7 @@
         : this.bossSpawned
           ? "보스 전투 중"
           : "최종 보스 소환";
+      this.updateSpecialBossButtons();
     }
 
     summonFinalBoss() {
@@ -451,11 +512,27 @@
       return Math.max(0, this.time.now - this.stageStartedAt);
     }
 
+    getProgressionXpMultiplier() {
+      if (this.playerState.isAwakened) {
+        return config.progression.awakenedXpMultiplier;
+      }
+      if (this.playerState.isGladiatorSecondJob) {
+        return config.progression.secondJobXpMultiplier;
+      }
+      if (this.playerState.isGladiator) {
+        return config.progression.gladiatorXpMultiplier;
+      }
+      return 1;
+    }
+
     getStageNumber() {
       return this.stageNumber;
     }
 
     getPlayerClassLabel() {
+      if (this.playerState.isAwakened) {
+        return config.player.promotion.awakening.classLabel;
+      }
       if (this.playerState.isGladiatorSecondJob) {
         return config.player.promotion.secondJobClassLabel;
       }
@@ -479,9 +556,12 @@
     }
 
     getPlayerAttackRange() {
-      return config.player.attackRange * (
+      const calculatedRange = config.player.attackRange * (
         this.playerState.isGladiator ? config.player.promotion.attackRangeMultiplier : 1
-      );
+      ) * (this.activeLegendaryEffects.tidalHelmet ? config.equipment.tidalAttackRangeMultiplier : 1);
+      return this.playerState.isAwakened
+        ? Math.min(calculatedRange, config.player.promotion.awakening.maximumAttackRange)
+        : calculatedRange;
     }
 
     isMilestoneBossStage() {
@@ -813,6 +893,9 @@
           equipmentStats.defense
         ).toFixed(2)
       );
+      if (this.activeLegendaryEffects.titanArmor) {
+        this.playerState.defense += this.playerState.strength * config.equipment.titanDefensePerStrength;
+      }
       this.playerState.maxHp = config.player.maxHp + (strengthDelta + equipmentStats.strength) * 5;
       this.playerState.magicDamage =
         knowledgeDelta + equipmentStats.knowledge >= 0
@@ -822,7 +905,7 @@
 
     spawnMonster() {
       // 몬스터 수가 가득 찼으면 더 생성하지 않는다.
-      if (this.monsters.getChildren().length >= config.monsters.maxAlive) {
+      if (this.monsters.countActive(true) >= config.monsters.maxAlive) {
         return;
       }
 
@@ -836,22 +919,34 @@
       const spawnX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 100, config.world.width - 100);
       const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 100, config.world.height - 100);
       const monsterLevel = leveling.getMonsterLevel(this.playerState.level, this.getStageMinimumMonsterLevel());
+      const awakenedStats = config.monsters.awakened;
+      const awakeningHpMultiplier = this.playerState.isAwakened ? awakenedStats.hpMultiplier : 1;
       const monsterMaxHp = Math.round(
-        leveling.getMonsterMaxHp(monsterLevel) * this.getStageScale(config.stage.monsterHpMultiplierPerStage)
+        leveling.getMonsterMaxHp(monsterLevel) *
+          this.getStageScale(config.stage.monsterHpMultiplierPerStage) *
+          awakeningHpMultiplier
       );
 
       const variant = this.getMonsterVariantByLevel(monsterLevel);
       const monster = this.physics.add.sprite(spawnX, spawnY, `monster-${variant}-idle`);
       // setData는 엔티티별 상태를 저장하는 간단한 key-value 저장소처럼 쓴다.
       monster.setDepth(18);
-      monster.setScale(this.getMonsterScaleByLevel(monsterLevel));
+      monster.setScale(
+        this.getMonsterScaleByLevel(monsterLevel) *
+          (this.playerState.isAwakened ? awakenedStats.scaleMultiplier : 1)
+      );
       monster.setData("variant", variant);
       monster.setData("speciesName", this.getMonsterSpeciesName(variant));
       monster.setData("level", monsterLevel);
       monster.setData(
+        "nameLabel",
+        `${this.playerState.isAwakened ? "각성 " : ""}LV${monsterLevel} ${this.getMonsterSpeciesName(variant)}`
+      );
+      monster.setData(
         "defenseMultiplier",
-        leveling.getMonsterDefenseMultiplier(monsterLevel) +
-          (this.stageNumber - 1) * config.stage.monsterDefenseBonusPerStage
+        (leveling.getMonsterDefenseMultiplier(monsterLevel) +
+          (this.stageNumber - 1) * config.stage.monsterDefenseBonusPerStage) *
+          (this.playerState.isAwakened ? awakenedStats.defenseMultiplier : 1)
       );
       monster.setData("hp", monsterMaxHp);
       monster.setData("maxHp", monsterMaxHp);
@@ -859,7 +954,8 @@
         "speed",
         Math.round(
           Phaser.Math.Between(config.monsters.speedMin, config.monsters.speedMax) *
-            this.getStageScale(config.stage.monsterSpeedMultiplierPerStage)
+            this.getStageScale(config.stage.monsterSpeedMultiplierPerStage) *
+            (this.playerState.isAwakened ? awakenedStats.speedMultiplier : 1)
         )
       );
       monster.setData("attackRange", Phaser.Math.Between(config.monsters.attackRangeMin, config.monsters.attackRangeMax));
@@ -1028,7 +1124,7 @@
       }
 
       const equippedItem = this.playerState.equippedItems[sameSlotKey];
-      const upgradeSucceeded = nextItem.isFinalBossDrop ||
+      const upgradeSucceeded = nextItem.isFinalBossDrop || nextItem.isSupremeBossDrop ||
         Phaser.Math.Between(1, 100) <= config.equipment.upgradeSuccessRate * 100;
       // 강화 시도에 사용한 재료는 성공 여부와 관계없이 소모한다.
       this.playerState.inventory.splice(inventoryIndex, 1);
@@ -1053,6 +1149,10 @@
       let unlockedEffectLabel = "";
       if (nextItem.isFinalBossDrop) {
         this.applyFinalLegendaryEffect(equippedItem);
+        unlockedEffectLabel = this.getFinalLegendaryEffectLabel(equippedItem);
+      }
+      if (nextItem.isSupremeBossDrop) {
+        equippedItem.finalLegendaryEffect = nextItem.supremeLegendaryEffect;
         unlockedEffectLabel = this.getFinalLegendaryEffectLabel(equippedItem);
       }
 
@@ -1083,10 +1183,17 @@
         wingedShoes: "천공의 날개 · 이동속도 2배",
         empoweredSplash: "뇌전 폭발 · 스플래시 120%",
         physicalGuard: "전설 수호 · 물리피해 10% 감소",
+        infernoWeapon: "불의 권능 · 0.1초마다 대상 최대 체력 0.1% 연소",
+        tidalHelmet: "물의 권능 · 공격거리 4배",
+        titanArmor: "대지의 권능 · 방어력 힘 × 100",
+        tempestShoes: "바람의 권능 · 이동속도 추가 4배",
       }[item?.finalLegendaryEffect] || "";
     }
 
     findUpgradeableEquipmentSlot(nextItem) {
+      if (nextItem.isSupremeBossDrop) {
+        return this.playerState.equippedItems[nextItem.type] ? nextItem.type : null;
+      }
       if (nextItem.type === "accessory") {
         return ["accessory1", "accessory2"].find((slotKey) => {
           return this.playerState.equippedItems[slotKey]?.type === nextItem.type;
@@ -1139,6 +1246,7 @@
       }
 
       equippedElement.innerHTML = "";
+      const equippedFragment = document.createDocumentFragment();
       this.getEquipmentSlots().forEach((slot) => {
         const item = this.playerState.equippedItems[slot.key];
         const row = document.createElement("div");
@@ -1161,8 +1269,9 @@
 
         body.append(title, stats);
         row.append(icon, body);
-        equippedElement.appendChild(row);
+        equippedFragment.appendChild(row);
       });
+      equippedElement.appendChild(equippedFragment);
 
       inventoryElement.innerHTML = "";
       if (this.playerState.inventory.length === 0) {
@@ -1173,6 +1282,7 @@
         return;
       }
 
+      const inventoryFragment = document.createDocumentFragment();
       this.playerState.inventory.forEach((item, index) => {
         const row = document.createElement("div");
         row.className = "inventory-item";
@@ -1186,7 +1296,9 @@
         const name = document.createElement("strong");
         name.textContent = item.name;
         const stats = document.createElement("span");
-        const sourceLabel = item.isFinalBossDrop
+        const sourceLabel = item.isSupremeBossDrop
+          ? `${item.elementLabel} 최강 보스 · 강화 성공 100% · 전용 권능 재료`
+          : item.isFinalBossDrop
           ? "최강 · 강화 성공 100% · 능력치 150% 흡수"
           : item.isBossDrop
             ? "보스 장비 · 강화 120%"
@@ -1195,8 +1307,9 @@
 
         body.append(name, stats);
         row.append(icon, body);
-        inventoryElement.appendChild(row);
+        inventoryFragment.appendChild(row);
       });
+      inventoryElement.appendChild(inventoryFragment);
     }
 
     getItemIconClass(item, slotKey = "") {
@@ -1226,9 +1339,10 @@
         defense: "방어",
       };
 
-      return Object.entries(item.stats)
+      const formattedStats = Object.entries(item.stats)
         .map(([key, value]) => `${labels[key]} +${value}`)
         .join(", ");
+      return formattedStats || "전용 권능 재료";
     }
 
     showLootToast(item) {
@@ -1255,6 +1369,157 @@
       });
     }
 
+    getSupremeBossProfile(type) {
+      return {
+        fire: {
+          label: "불의",
+          name: "홍련의 군주",
+          tint: 0xff4b22,
+          labelColor: "#ffb08d",
+          hpColor: 0xff542f,
+          effect: "스플래시",
+          dropType: "weapon",
+          dropName: "홍련의 심장검",
+          legendaryEffect: "infernoWeapon",
+        },
+        water: {
+          label: "물의",
+          name: "심해의 군주",
+          tint: 0x399eea,
+          labelColor: "#9fddff",
+          hpColor: 0x45b6ff,
+          effect: "지속 피해",
+          dropType: "helmet",
+          dropName: "심해의 왕관",
+          legendaryEffect: "tidalHelmet",
+        },
+        earth: {
+          label: "대지의",
+          name: "태고의 거신",
+          tint: 0xc49a42,
+          labelColor: "#ffe0a0",
+          hpColor: 0xb8903f,
+          effect: "절대 방어",
+          dropType: "armor",
+          dropName: "태고의 대지갑",
+          legendaryEffect: "titanArmor",
+        },
+        wind: {
+          label: "바람의",
+          name: "폭풍의 군주",
+          tint: 0x55d6a4,
+          labelColor: "#a9ffdf",
+          hpColor: 0x55d6a4,
+          effect: "고속 회복",
+          dropType: "shoes",
+          dropName: "폭풍걸음 장화",
+          legendaryEffect: "tempestShoes",
+        },
+      }[type];
+    }
+
+    summonSpecialBoss(type) {
+      if (this.gameOver || this.stageCleared || this.bossSpawned) {
+        return;
+      }
+      if (type === "awakening" &&
+          (!this.playerState.isGladiatorSecondJob || this.playerState.isAwakened)) {
+        return;
+      }
+
+      const profile = type === "awakening"
+        ? {
+            name: "각성의 심판자",
+            labelColor: "#e1adff",
+            hpColor: 0xb35cff,
+            tint: 0xb864ee,
+            effect: "각성 시험",
+          }
+        : this.getSupremeBossProfile(type);
+      if (!profile) {
+        return;
+      }
+
+      this.monsterSpawner?.remove(false);
+      this.waveEnded = true;
+      this.removeActiveEnemies();
+
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const distance = Phaser.Math.Between(230, 280);
+      const spawnX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 120, config.world.width - 120);
+      const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 120, config.world.height - 120);
+      const level = Math.max(this.getStageMinimumMonsterLevel(), this.playerState.level + 2);
+      const maxHp = type === "awakening"
+        ? config.player.promotion.awakening.challengeBossHp
+        : config.supremeBoss.maxHp;
+      const boss = this.physics.add.sprite(spawnX, spawnY, "boss-idle");
+      boss.setScale(type === "awakening" ? 2.45 : 2.8);
+      boss.setTint(profile.tint);
+      boss.setDepth(22);
+      boss.setCollideWorldBounds(true);
+      boss.setData("isBoss", true);
+      boss.setData("isFinalBoss", false);
+      boss.setData("specialBossType", type);
+      boss.setData("bossProfile", profile);
+      boss.setData("level", level);
+      boss.setData("hp", maxHp);
+      boss.setData("maxHp", maxHp);
+      boss.setData("speed", type === "wind" ? 105 : 70);
+      boss.setData("attackRange", config.monsters.attackRangeMax + 100);
+      boss.setData("defenseMultiplier", type === "earth" ? config.supremeBoss.earthDefenseMultiplier : 1);
+      boss.setData("nextShotAt", this.time.now + 700);
+      boss.setData("nextHealAt", this.time.now + config.supremeBoss.windHealInterval);
+
+      const hpBar = this.add.graphics().setDepth(34);
+      const levelText = this.add.text(
+        boss.x,
+        boss.y - 82,
+        `${profile.label || ""} ${profile.name} · ${profile.effect} · HP ${maxHp.toLocaleString("ko-KR")}`,
+        {
+          fontFamily: "Plus Jakarta Sans, Segoe UI",
+          fontSize: "14px",
+          color: profile.labelColor,
+          stroke: "#1a1a1b",
+          strokeThickness: 4,
+          fontStyle: "800",
+        }
+      ).setOrigin(0.5).setDepth(35);
+      boss.setData("hpBar", hpBar);
+      boss.setData("levelText", levelText);
+      boss.setData("nameLabel", `${profile.label || ""} ${profile.name} · ${profile.effect}`.trim());
+
+      this.monsters.add(boss);
+      this.bossMonster = boss;
+      this.bossSpawned = true;
+      this.activeSpecialBossType = type;
+      this.showSystemToast(
+        `${profile.label || ""} ${profile.name} 등장 · HP ${maxHp.toLocaleString("ko-KR")}`.trim(),
+        profile.labelColor
+      );
+      this.refreshUi();
+      this.updateFinalBossButton();
+    }
+
+    createSupremeBossDrop(type, level) {
+      const profile = this.getSupremeBossProfile(type);
+      return {
+        id: `${Date.now()}-${Phaser.Math.Between(1000, 9999)}`,
+        name: `레전더리 ${profile.dropName}`,
+        baseName: profile.dropName,
+        upgradeLevel: 0,
+        type: profile.dropType,
+        level,
+        rarity: "레전더리",
+        isBossDrop: true,
+        isSupremeBossDrop: true,
+        supremeLegendaryEffect: profile.legendaryEffect,
+        elementLabel: profile.label,
+        acquiredStage: this.stageNumber,
+        stats: {},
+        baseStats: {},
+      };
+    }
+
     spawnBoss(isFinalBoss = false) {
       if (this.bossSpawned || this.stageCleared) {
         return;
@@ -1268,12 +1533,14 @@
       this.removeActiveEnemies();
 
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const distance = Phaser.Math.Between(420, 560);
+      const distance = Phaser.Math.Between(230, 280);
       const spawnX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 120, config.world.width - 120);
       const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 120, config.world.height - 120);
       const bossLevel = Math.max(this.getStageMinimumMonsterLevel(), this.playerState.level + 2);
       const bossProfile = this.getBossProfile(bossLevel);
       const bossBaseHp = leveling.getMonsterMaxHp(bossLevel);
+      const awakenedStats = config.monsters.awakened;
+      const awakeningHpMultiplier = this.playerState.isAwakened ? awakenedStats.hpMultiplier : 1;
       const milestoneHpMultiplier = this.isMilestoneBossStage()
         ? config.stage.milestoneBossHpMultiplier
         : 1;
@@ -1286,7 +1553,8 @@
             bossProfile.hpMultiplier *
             milestoneHpMultiplier *
             finalHpMultiplier *
-            this.getStageScale(config.stage.monsterHpMultiplierPerStage)
+            this.getStageScale(config.stage.monsterHpMultiplierPerStage) *
+            awakeningHpMultiplier
         )
       );
 
@@ -1294,6 +1562,7 @@
       boss.setScale(
         config.monsters.bossScale * bossProfile.scale *
           (isFinalBoss ? config.stage.finalBossScaleMultiplier : 1)
+          * (this.playerState.isAwakened ? awakenedStats.scaleMultiplier : 1)
       );
       boss.setTint(isFinalBoss ? 0x8f1028 : bossProfile.tint);
       boss.setDepth(22);
@@ -1310,15 +1579,17 @@
           config.monsters.speedMax *
             config.monsters.bossSpeedMultiplier *
             bossProfile.speedMultiplier *
-            this.getStageScale(config.stage.monsterSpeedMultiplierPerStage)
+            this.getStageScale(config.stage.monsterSpeedMultiplierPerStage) *
+            (this.playerState.isAwakened ? awakenedStats.speedMultiplier : 1)
         )
       );
       boss.setData("attackRange", config.monsters.attackRangeMax + 70);
       boss.setData(
         "defenseMultiplier",
-        leveling.getMonsterDefenseMultiplier(bossLevel) +
+        (leveling.getMonsterDefenseMultiplier(bossLevel) +
           bossProfile.defenseBonus +
-          (this.stageNumber - 1) * config.stage.monsterDefenseBonusPerStage
+          (this.stageNumber - 1) * config.stage.monsterDefenseBonusPerStage) *
+          (this.playerState.isAwakened ? awakenedStats.defenseMultiplier : 1)
       );
       boss.setData("nextShotAt", this.time.now + 900);
 
@@ -1339,6 +1610,7 @@
 
       boss.setData("hpBar", hpBar);
       boss.setData("levelText", levelText);
+      boss.setData("nameLabel", `${bossLabel} LV:${bossLevel}`);
 
       this.monsters.add(boss);
       this.bossMonster = boss;
@@ -1418,7 +1690,10 @@
       const legendaryMoveMultiplier = this.activeLegendaryEffects.wingedShoes
         ? config.equipment.finalShoesMoveSpeedMultiplier
         : 1;
-      const speed = config.player.speed * promotionMoveMultiplier * legendaryMoveMultiplier *
+      const tempestMoveMultiplier = this.activeLegendaryEffects.tempestShoes
+        ? config.equipment.tempestMoveSpeedMultiplier
+        : 1;
+      const speed = config.player.speed * promotionMoveMultiplier * legendaryMoveMultiplier * tempestMoveMultiplier *
         (sprinting ? 1.4 : 1) * demonMoveMultiplier;
       let velocityX = 0;
       let velocityY = 0;
@@ -1455,7 +1730,10 @@
         this.player.anims.play(this.getPlayerRunAnimationKey(), true);
       } else {
         this.player.anims.stop();
-        this.player.setTexture(this.getPlayerTextureKey("idle"));
+        const idleTexture = this.getPlayerTextureKey("idle");
+        if (this.player.texture.key !== idleTexture) {
+          this.player.setTexture(idleTexture);
+        }
       }
     }
 
@@ -1490,9 +1768,36 @@
           );
         }
 
+        this.updateSpecialBossAbility(monster, time);
+
         this.updateMonsterAnimation(monster, time);
 
         this.drawMonsterHud(monster);
+      });
+    }
+
+    updateSpecialBossAbility(monster, time) {
+      if (monster.getData("specialBossType") !== "wind" || time < monster.getData("nextHealAt")) {
+        return;
+      }
+      const maxHp = monster.getData("maxHp");
+      const hp = monster.getData("hp");
+      monster.setData("hp", Math.min(maxHp, hp + maxHp * config.supremeBoss.windHealMaxHpRatio));
+      monster.setData("nextHealAt", time + config.supremeBoss.windHealInterval);
+      monster.setData("lastHudHpRatio", null);
+      this.playBossRecoveryEffect(monster);
+    }
+
+    playBossRecoveryEffect(monster) {
+      const ring = this.add.circle(monster.x, monster.y, 28).setDepth(45);
+      ring.setStrokeStyle(5, 0x7dffbe, 0.9);
+      this.tweens.add({
+        targets: ring,
+        scaleX: 3,
+        scaleY: 3,
+        alpha: 0,
+        duration: 420,
+        onComplete: () => ring.destroy(),
       });
     }
 
@@ -1523,7 +1828,9 @@
 
       if (time < attackLockedUntil) {
         monster.anims.stop();
-        monster.setTexture(attackKey);
+        if (monster.texture.key !== attackKey) {
+          monster.setTexture(attackKey);
+        }
         return;
       }
 
@@ -1531,7 +1838,9 @@
         monster.anims.play(runKey, true);
       } else {
         monster.anims.stop();
-        monster.setTexture(idleKey);
+        if (monster.texture.key !== idleKey) {
+          monster.setTexture(idleKey);
+        }
       }
     }
 
@@ -1561,6 +1870,9 @@
         hpBar.lineStyle(1, 0xffe2ab, 0.5);
         hpBar.strokeRoundedRect(-barWidth / 2, barY, barWidth, barHeight, 3);
         monster.setData("lastHudHpRatio", ratio);
+        levelText.setText(
+          `${monster.getData("nameLabel") || `LV${level}`} | HP ${Math.ceil(hp).toLocaleString("ko-KR")} / ${Math.ceil(maxHp).toLocaleString("ko-KR")}`
+        );
       }
       levelText.setPosition(monster.x, monster.y + textY);
     }
@@ -1578,11 +1890,21 @@
       this.playerLevelText.setPosition(this.player.x, this.player.y - 52);
     }
 
+    updateStatusCounter(time) {
+      if (time - this.lastStatusCounterRefreshAt < 200) {
+        return;
+      }
+      this.lastStatusCounterRefreshAt = time;
+      hudSystem.refreshStatusCounter(this);
+    }
+
     fireMonsterProjectile(monster) {
       // 투사체 생성 -> 속도 부여 -> group 등록 순서.
       const projectile = this.physics.add.image(monster.x, monster.y - 4, "enemy-shot");
       const isBoss = monster.getData("isBoss");
       const stageDamageMultiplier = this.getStageScale(config.stage.monsterDamageMultiplierPerStage);
+      const awakenedStats = config.monsters.awakened;
+      const awakeningDamageMultiplier = this.playerState.isAwakened ? awakenedStats.damageMultiplier : 1;
       const milestoneDamageMultiplier = isBoss && this.isMilestoneBossStage()
         ? config.stage.milestoneBossDamageMultiplier
         : 1;
@@ -1591,20 +1913,41 @@
         : 1;
       projectile.setDepth(24);
       projectile.setScale(isBoss ? 1.4 : 1);
-      projectile.setData(
-        "damage",
-        isBoss
+      let projectileDamage = isBoss
           ? Math.round(
               (config.monsters.projectileDamage + monster.getData("level") * 2) *
                 config.monsters.bossProjectileDamageMultiplier *
                 milestoneDamageMultiplier *
                 finalBossDamageMultiplier *
-                stageDamageMultiplier
+                stageDamageMultiplier *
+                awakeningDamageMultiplier
             )
-          : Math.round((config.monsters.projectileDamage + monster.getData("level") * 2) * stageDamageMultiplier)
-      );
+          : Math.round(
+              (config.monsters.projectileDamage + monster.getData("level") * 2) *
+                stageDamageMultiplier *
+                awakeningDamageMultiplier
+            );
+      if (monster.getData("specialBossType")) {
+        projectileDamage = Math.max(
+          projectileDamage,
+          Math.round(
+            this.playerState.defense +
+              this.playerState.maxHp * config.supremeBoss.projectileMaxHpDamageRatio
+          )
+        );
+      } else if (this.playerState.isAwakened) {
+        const maxHpDamageRatio = isBoss
+          ? awakenedStats.bossProjectileMaxHpDamageRatio
+          : awakenedStats.projectileMaxHpDamageRatio;
+        projectileDamage = Math.max(
+          projectileDamage,
+          Math.round(this.playerState.defense + this.playerState.maxHp * maxHpDamageRatio)
+        );
+      }
+      projectile.setData("damage", projectileDamage);
       projectile.setData("spawnedAt", this.time.now);
       projectile.setData("speed", config.monsters.projectileSpeed);
+      projectile.setData("specialBossType", monster.getData("specialBossType") || null);
       monster.setData("attackLockedUntil", this.time.now + 180);
       this.physics.moveToObject(projectile, this.player, config.monsters.projectileSpeed);
       this.enemyProjectiles.add(projectile);
@@ -1627,6 +1970,7 @@
 
       // 방어력만큼 차감하되 최소 피해는 1 보장.
       const incomingDamage = projectile.getData("damage");
+      const specialBossType = projectile.getData("specialBossType");
       const defenseReducedDamage = Math.max(1, incomingDamage - this.playerState.defense);
       const reducedDamage = defenseReducedDamage * (
         this.activeLegendaryEffects.physicalGuard
@@ -1634,11 +1978,46 @@
           : 1
       );
       this.playerState.hp = Math.max(0, this.playerState.hp - reducedDamage);
+      if (specialBossType === "fire") {
+        this.playerState.hp = Math.max(0, this.playerState.hp - reducedDamage * 0.5);
+        this.playElementalHitEffect(player.x, player.y, 0xff542f, "화염 스플래시");
+      } else if (specialBossType === "water") {
+        this.waterDotUntil = this.time.now + config.supremeBoss.waterDotDuration;
+        this.nextWaterDotAt = this.time.now + config.supremeBoss.waterDotInterval;
+        this.playElementalHitEffect(player.x, player.y, 0x45b6ff, "침수");
+      }
       projectile.destroy();
       this.refreshUi();
 
       if (this.playerState.hp <= 0) {
         this.showGameOver();
+      }
+    }
+
+    playElementalHitEffect(x, y, color, label) {
+      const blast = this.add.circle(x, y, 22, color, 0.7).setDepth(50);
+      const text = this.add.text(x, y - 54, label, {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "18px",
+        color: "#ffffff",
+        fontStyle: "800",
+        stroke: "#1a1a1b",
+        strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(51);
+      this.tweens.add({ targets: blast, scale: 4, alpha: 0, duration: 350, onComplete: () => blast.destroy() });
+      this.tweens.add({ targets: text, y: y - 90, alpha: 0, duration: 650, onComplete: () => text.destroy() });
+    }
+
+    updatePlayerStatusEffects(time) {
+      if (time < this.waterDotUntil && time >= this.nextWaterDotAt && !this.gameOver) {
+        const damage = Math.max(1, this.playerState.maxHp * config.supremeBoss.waterDotDamageRatio);
+        this.playerState.hp = Math.max(0, this.playerState.hp - damage);
+        this.nextWaterDotAt = time + config.supremeBoss.waterDotInterval;
+        this.playElementalHitEffect(this.player.x, this.player.y, 0x298fda, "지속 피해");
+        this.refreshUi();
+        if (this.playerState.hp <= 0) {
+          this.showGameOver();
+        }
       }
     }
 
@@ -1658,7 +2037,9 @@
       }
 
       // 공속이 올라갈수록 실제 공격 주기가 짧아진다.
-      const minimumAttackCooldown = this.playerState.isGladiator ? 20 : 120;
+      const minimumAttackCooldown = this.playerState.isAwakened
+        ? config.player.promotion.awakening.minimumAttackCooldown
+        : this.playerState.isGladiator ? 20 : 120;
       this.attackCooldown = time + Math.max(
         minimumAttackCooldown,
         config.player.attackCooldownBase / this.getEffectiveAttackRateStage(time)
@@ -1676,6 +2057,9 @@
         const attackDamage = this.playerState.damage * (
           criticalHit ? config.player.promotion.criticalDamageMultiplier : 1
         );
+        if (this.playerState.isAwakened) {
+          this.handleAwakenedBasicAttack(target);
+        }
         this.handleGladiatorBasicAttack(target, attackDamage);
         return;
       }
@@ -1686,6 +2070,80 @@
       }
 
       this.damageMonster(target, this.playerState.damage);
+    }
+
+    handleAwakenedBasicAttack(target) {
+      const awakening = config.player.promotion.awakening;
+      const hpRatio = Math.min(
+        awakening.maxMonsterHpDamageRatio,
+        this.playerState.strength * awakening.monsterHpDamagePercentPerStrength / 100
+      );
+      const proportionalDamage = target.getData("maxHp") * hpRatio;
+      this.playBleedingImpact(target);
+      this.damageMonster(target, proportionalDamage, { ignoreDefense: true });
+    }
+
+    playBleedingImpact(target) {
+      if (this.time.now - this.lastBleedingImpactAt < config.player.promotion.awakening.bleedingFeedbackCooldown) {
+        return;
+      }
+      this.lastBleedingImpactAt = this.time.now;
+      const x = target.x;
+      const y = target.y - 8;
+      for (let index = 0; index < 9; index += 1) {
+        const angle = Phaser.Math.FloatBetween(-Math.PI, 0);
+        const blood = this.add.circle(x, y, Phaser.Math.Between(3, 7), 0xb4142c, 0.95).setDepth(54);
+        this.tweens.add({
+          targets: blood,
+          x: x + Math.cos(angle) * Phaser.Math.Between(28, 70),
+          y: y + Math.sin(angle) * Phaser.Math.Between(28, 70) + 32,
+          alpha: 0,
+          duration: Phaser.Math.Between(280, 520),
+          onComplete: () => blood.destroy(),
+        });
+      }
+      const bleedText = this.add.text(x, y - 42, "출혈", {
+        fontFamily: "Plus Jakarta Sans, Segoe UI",
+        fontSize: "20px",
+        color: "#ff5a6f",
+        fontStyle: "900",
+        stroke: "#39030b",
+        strokeThickness: 5,
+      }).setOrigin(0.5).setDepth(55);
+      this.tweens.add({ targets: bleedText, y: y - 82, alpha: 0, duration: 560, onComplete: () => bleedText.destroy() });
+    }
+
+    updateInfernoWeapon(time) {
+      if (!this.activeLegendaryEffects.infernoWeapon ||
+          time - this.lastInfernoBurnAt < config.equipment.infernoBurnInterval) {
+        return;
+      }
+      const target = this.findNearestActiveMonster();
+      if (!target) {
+        return;
+      }
+      this.lastInfernoBurnAt = time;
+      this.damageMonster(
+        target,
+        target.getData("maxHp") * config.equipment.infernoBurnMaxHpRatio,
+        { ignoreDefense: true }
+      );
+      const ember = this.add.circle(target.x, target.y - 8, 7, 0xff5a20, 0.85).setDepth(47);
+      this.tweens.add({ targets: ember, y: target.y - 48, scale: 0.2, alpha: 0, duration: 180, onComplete: () => ember.destroy() });
+    }
+
+    findNearestActiveMonster() {
+      let nearest = null;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      this.monsters.getChildren().forEach((monster) => {
+        if (!monster.active) return;
+        const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, monster.x, monster.y);
+        if (distance < nearestDistance) {
+          nearest = monster;
+          nearestDistance = distance;
+        }
+      });
+      return nearest;
     }
 
     hasEmpoweredAccessory() {
@@ -1887,6 +2345,10 @@
     }
 
     playCriticalImpact(target) {
+      if (this.time.now - this.lastCriticalImpactAt < config.player.promotion.impactFeedbackCooldown) {
+        return;
+      }
+      this.lastCriticalImpactAt = this.time.now;
       const impactX = target.x;
       const impactY = target.y - 8;
       this.cameras.main.shake(110, 0.009);
@@ -1936,6 +2398,10 @@
       // 플레이어 방향 전환 + 공격 텍스처 + slash 이펙트를 묶은 연출.
       const facingLeft = target.x < this.player.x;
       this.player.setFlipX(facingLeft);
+      if (this.time.now - this.lastMeleeVisualAt < config.player.promotion.meleeFeedbackCooldown) {
+        return;
+      }
+      this.lastMeleeVisualAt = this.time.now;
       this.player.anims.stop();
       this.player.setTexture(this.getPlayerTextureKey("attack"));
 
@@ -1971,9 +2437,11 @@
     }
 
     playChainLightningEffect(targets) {
-      if (targets.length < 2) {
+      if (targets.length < 2 ||
+          this.time.now - this.lastChainEffectAt < config.player.promotion.chainFeedbackCooldown) {
         return;
       }
+      this.lastChainEffectAt = this.time.now;
 
       const lightning = this.add.graphics().setDepth(43);
       lightning.lineStyle(7, 0x79d0ff, 0.72);
@@ -2271,18 +2739,19 @@
       });
     }
 
-    damageMonster(monster, amount) {
+    damageMonster(monster, amount, { ignoreDefense = false } = {}) {
       // 몬스터 레벨 기반 방어 배율을 적용한 뒤 HP를 감소시킨다.
       if (!monster.active) {
         return;
       }
 
       const defenseMultiplier = monster.getData("defenseMultiplier") || 1;
-      const mitigatedDamage = Math.max(0.1, amount / defenseMultiplier);
+      const mitigatedDamage = Math.max(0.1, ignoreDefense ? amount : amount / defenseMultiplier);
       const currentHp = monster.getData("hp");
       const dealtDamage = Math.min(currentHp, mitigatedDamage);
       const nextHp = Math.max(0, currentHp - mitigatedDamage);
       monster.setData("hp", nextHp);
+      this.showMonsterDamageNumber(monster, dealtDamage, ignoreDefense);
       this.drawMonsterHud(monster);
 
       if (this.time.now < this.demonModeUntil && dealtDamage > 0) {
@@ -2290,7 +2759,7 @@
         this.playerState.hp = Math.min(this.playerState.maxHp, this.playerState.hp + healedHp);
         if (this.time.now - this.lastCombatHudRefreshAt >= 100) {
           this.lastCombatHudRefreshAt = this.time.now;
-          hudSystem.refreshHud(this, this.hud);
+          hudSystem.refreshStatusCounter(this);
         }
       }
 
@@ -2300,6 +2769,50 @@
       }
     }
 
+    showMonsterDamageNumber(monster, amount, ignoreDefense = false) {
+      if (amount <= 0) {
+        return;
+      }
+
+      const existingText = monster.getData("damageText");
+      if (existingText?.active) {
+        const accumulatedDamage = (monster.getData("accumulatedDamage") || 0) + amount;
+        monster.setData("accumulatedDamage", accumulatedDamage);
+        existingText.setText(`-${Math.max(1, Math.round(accumulatedDamage)).toLocaleString("ko-KR")}`);
+        return;
+      }
+
+      const damageText = this.add.text(
+        monster.x + Phaser.Math.Between(-12, 12),
+        monster.y - 58,
+        `-${Math.max(1, Math.round(amount)).toLocaleString("ko-KR")}`,
+        {
+          fontFamily: "Plus Jakarta Sans, Segoe UI",
+          fontSize: monster.getData("isBoss") ? "22px" : "17px",
+          color: ignoreDefense ? "#ffcf66" : "#ffffff",
+          fontStyle: "900",
+          stroke: "#1a1a1b",
+          strokeThickness: 4,
+        }
+      ).setOrigin(0.5).setDepth(80);
+      monster.setData("damageText", damageText);
+      monster.setData("accumulatedDamage", amount);
+      this.tweens.add({
+        targets: damageText,
+        y: damageText.y - 42,
+        alpha: 0,
+        duration: 520,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          if (monster.active && monster.getData("damageText") === damageText) {
+            monster.setData("damageText", null);
+            monster.setData("accumulatedDamage", 0);
+          }
+          damageText.destroy();
+        },
+      });
+    }
+
     killMonster(monster) {
       // 몬스터 본체뿐 아니라 부가 UI도 같이 정리해야 누수가 없다.
       const hpBar = monster.getData("hpBar");
@@ -2307,6 +2820,7 @@
       const level = monster.getData("level");
       const isBoss = monster.getData("isBoss");
       const isFinalBoss = monster.getData("isFinalBoss");
+      const specialBossType = monster.getData("specialBossType");
       const rawReward = Math.round(
         leveling.getMonsterXpReward(level) *
           (isBoss ? config.stage.bossXpMultiplier : 1) *
@@ -2330,12 +2844,35 @@
         this.finalBossActive = false;
       }
 
-      this.maybeAutoLootEquipment(level, isBoss, isFinalBoss);
+      if (specialBossType && specialBossType !== "awakening") {
+        const item = this.createSupremeBossDrop(specialBossType, level);
+        this.playerState.inventory.unshift(item);
+        this.renderInventory();
+        this.showLootToast(item);
+      } else if (!specialBossType) {
+        this.maybeAutoLootEquipment(level, isBoss, isFinalBoss);
+      }
       this.gainExperience(reward);
 
-      if (isBoss) {
+      if (specialBossType) {
+        if (specialBossType === "awakening") {
+          this.awakenAsGladiator();
+        }
+        this.finishSpecialBossBattle();
+      } else if (isBoss) {
         this.clearStage();
       }
+    }
+
+    finishSpecialBossBattle() {
+      this.bossSpawned = false;
+      this.activeSpecialBossType = null;
+      this.waterDotUntil = 0;
+      this.removeActiveEnemies();
+      this.startStage();
+      this.startMonsterSpawner();
+      this.refreshUi(true);
+      this.updateSpecialBossButtons();
     }
 
     gainExperience(amount) {
@@ -2370,7 +2907,10 @@
         this.playerState.hp = this.playerState.maxHp;
         this.recalculatePlayerStats();
         this.playerState.hp = this.playerState.maxHp;
-        this.playerState.xpToNext = leveling.getXpToNext(this.playerState.level + 1);
+        this.playerState.xpToNext = leveling.getXpToNext(
+          this.playerState.level + 1,
+          this.getProgressionXpMultiplier()
+        );
         if (shouldPromote || shouldSecondJobRebirth) {
           break;
         }
@@ -2388,7 +2928,7 @@
       this.playerState.isGladiator = true;
       this.playerState.level = 1;
       this.playerState.xp = 0;
-      this.playerState.xpToNext = leveling.getXpToNext(2);
+      this.playerState.xpToNext = leveling.getXpToNext(2, this.getProgressionXpMultiplier());
       this.attackSpeedBuffUntil = 0;
       this.applyPlayerAppearance();
       this.playPromotionEffect("검투사 전직!");
@@ -2408,13 +2948,37 @@
       this.playerState.isGladiatorSecondJob = true;
       this.playerState.level = 1;
       this.playerState.xp = 0;
-      this.playerState.xpToNext = leveling.getXpToNext(2);
+      this.playerState.xpToNext = leveling.getXpToNext(2, this.getProgressionXpMultiplier());
       this.skillCooldownUntil = 0;
       this.demonModeUntil = 0;
       this.guaranteedCriticalUntil = 0;
       this.attackSpeedBuffUntil = 0;
       this.applyPlayerAppearance();
       this.playPromotionEffect("검투사 2차 환생!");
+      this.updateSpecialBossButtons();
+    }
+
+    awakenAsGladiator() {
+      if (this.playerState.isAwakened) {
+        return;
+      }
+      const awakening = config.player.promotion.awakening;
+      this.playerState.strength = Math.round(this.playerState.strength * awakening.strengthMultiplier);
+      this.playerState.dexterity = Math.round(this.playerState.dexterity * awakening.dexterityMultiplier);
+      this.playerState.knowledge = Math.round(this.playerState.knowledge * awakening.knowledgeMultiplier);
+      this.playerState.isAwakened = true;
+      this.playerState.level = 1;
+      this.playerState.xp = 0;
+      this.playerState.xpToNext = leveling.getXpToNext(2, this.getProgressionXpMultiplier());
+      this.skillCooldownUntil = 0;
+      this.demonModeUntil = 0;
+      this.guaranteedCriticalUntil = 0;
+      this.attackSpeedBuffUntil = 0;
+      this.recalculatePlayerStats();
+      this.playerState.hp = this.playerState.maxHp;
+      this.applyPlayerAppearance();
+      this.playPromotionEffect("각성 환생!");
+      this.updateSpecialBossButtons();
     }
 
     applyPlayerAppearance() {
@@ -2450,20 +3014,23 @@
       this.promotionAura
         ?.setPosition(this.player.x, this.player.y + 2)
         .setVisible(true);
-      const visualState = demonModeActive ? "demon" : "gladiator";
+      const visualState = demonModeActive ? "demon" : this.playerState.isAwakened ? "awakened" : "gladiator";
       if (visualState === this.lastPlayerVisualState) {
         return;
       }
 
       this.lastPlayerVisualState = visualState;
       this.promotionAura
-        ?.setFillStyle(demonModeActive ? 0x8f1238 : 0xffdc73, demonModeActive ? 0.34 : 0.18)
-        .setStrokeStyle(3, demonModeActive ? 0xff4c64 : 0xfff4b0, 0.9);
+        ?.setFillStyle(
+          demonModeActive ? 0x8f1238 : this.playerState.isAwakened ? 0x7616bd : 0xffdc73,
+          demonModeActive ? 0.34 : this.playerState.isAwakened ? 0.3 : 0.18
+        )
+        .setStrokeStyle(3, demonModeActive ? 0xff4c64 : this.playerState.isAwakened ? 0xe6a4ff : 0xfff4b0, 0.9);
       this.player.setTint(
-        demonModeActive ? 0xff6680 : 0xfff4b0,
-        demonModeActive ? 0x8f1238 : 0xb9eaff,
-        demonModeActive ? 0xff294f : 0xffffff,
-        demonModeActive ? 0x4f071d : 0xffdc73
+        demonModeActive ? 0xff6680 : this.playerState.isAwakened ? 0xe0a2ff : 0xfff4b0,
+        demonModeActive ? 0x8f1238 : this.playerState.isAwakened ? 0x8d38cb : 0xb9eaff,
+        demonModeActive ? 0xff294f : this.playerState.isAwakened ? 0xffffff : 0xffffff,
+        demonModeActive ? 0x4f071d : this.playerState.isAwakened ? 0x541080 : 0xffdc73
       );
     }
 
@@ -2538,19 +3105,8 @@
       });
     }
 
-    updateProjectiles() {
-      // 발사된 투사체는 매 프레임 플레이어를 계속 추적한다.
-      this.enemyProjectiles.getChildren().forEach((projectile) => {
-        if (!projectile.active) {
-          return;
-        }
-
-        this.physics.moveToObject(projectile, this.player, projectile.getData("speed"));
-      });
-    }
-
-    cleanupProjectiles() {
-      // 화면 밖으로 나갔거나 오래된 투사체는 정리한다.
+    updateProjectiles(time) {
+      // 추적과 수명 정리를 한 번의 순회에서 처리한다.
       this.enemyProjectiles.getChildren().forEach((projectile) => {
         if (!projectile.active) {
           return;
@@ -2561,11 +3117,14 @@
           projectile.x > config.world.width + 40 ||
           projectile.y < -40 ||
           projectile.y > config.world.height + 40;
-        const expired = this.time.now - projectile.getData("spawnedAt") > 3000;
+        const expired = time - projectile.getData("spawnedAt") > 3000;
 
         if (outOfBounds || expired) {
           projectile.destroy();
+          return;
         }
+
+        this.physics.moveToObject(projectile, this.player, projectile.getData("speed"));
       });
     }
 
@@ -2575,12 +3134,14 @@
       this.updateStageFlow();
       this.updatePlayerMovement(time);
       this.updateMonsters(time);
+      this.updatePlayerStatusEffects(time);
       this.handleAutoAttack(time);
+      this.updateInfernoWeapon(time);
       this.handleSkillCast(time);
-      this.updateProjectiles();
-      this.cleanupProjectiles();
+      this.updateProjectiles(time);
       this.updatePlayerEffects(time);
       this.drawPlayerHud();
+      this.updateStatusCounter(time);
     }
   }
 

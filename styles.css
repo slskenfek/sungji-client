@@ -46,7 +46,7 @@ body {
 .app-nav,
 .game-topbar,
 #game-root,
-.command-dock,
+.equipment-dock,
 .panel-hero,
 .card {
   border: 1px solid var(--panel-border);
@@ -113,28 +113,39 @@ h1 {
 
 .game-title-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
 }
 
-.final-boss-button {
+.boss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.boss-button {
   min-height: 36px;
-  padding: 0 15px;
+  padding: 0 11px;
   border: 1px solid rgba(255, 109, 98, 0.76);
   border-radius: 8px;
   background: linear-gradient(135deg, #9f1f2d, #4d0a18);
   color: #fff1d0;
-  font: 800 13px/1 "JetBrains Mono", Consolas, monospace;
+  font: 800 11px/1 "JetBrains Mono", Consolas, monospace;
   box-shadow: 0 0 18px rgba(255, 61, 61, 0.25);
   cursor: pointer;
 }
 
-.final-boss-button:hover:not(:disabled) {
+.boss-button.awakening { background: linear-gradient(135deg, #7a35b5, #32134d); border-color: #d190ff; }
+.boss-button.water { background: linear-gradient(135deg, #176eb2, #082d58); border-color: #79d0ff; }
+.boss-button.earth { background: linear-gradient(135deg, #74612a, #342a10); border-color: #d4b767; }
+.boss-button.wind { background: linear-gradient(135deg, #2a8d72, #103c35); border-color: #89efd0; }
+
+.boss-button:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 0 24px rgba(255, 61, 61, 0.5);
 }
 
-.final-boss-button:disabled {
+.boss-button:disabled {
   opacity: 0.42;
   cursor: not-allowed;
   box-shadow: none;
@@ -233,6 +244,60 @@ h1 {
   display: grid;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.equipment-dock {
+  padding: 14px;
+  border-radius: var(--radius);
+}
+
+.equipment-dock-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+.equipment-dock-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.equipment-dock-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.equipment-dock .equipment-slots {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
+.equipment-dock .equipment-slot {
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.below-game-status {
+  width: 100%;
+}
+
+.below-game-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 14px;
+}
+
+.below-game-inventory .inventory-list {
+  max-height: 260px;
+}
+
+.skill-panel-card {
+  display: grid;
+  gap: 8px;
 }
 
 .equipment-slot,
@@ -396,30 +461,92 @@ h1 {
   font-size: 24px;
 }
 
-.command-dock {
-  align-self: center;
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius);
-}
-
-.dock-slot {
+.player-status-card {
   display: grid;
-  place-items: center;
-  min-width: 54px;
-  height: 42px;
-  border-radius: 6px;
-  background: rgba(0, 15, 33, 0.72);
-  border: 1px solid rgba(211, 228, 254, 0.1);
-  color: var(--text);
-  font: 800 13px/1 "JetBrains Mono", Consolas, monospace;
+  gap: 14px;
 }
 
-.dock-slot.primary {
-  min-width: 78px;
-  background: linear-gradient(135deg, var(--accent), #a77d22);
-  color: #241a00;
+.status-meter {
+  display: grid;
+  gap: 7px;
+}
+
+.status-meter-label,
+.skill-counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font: 700 12px/1.3 "JetBrains Mono", Consolas, monospace;
+}
+
+.status-meter-label strong,
+.skill-counter strong {
+  color: var(--text);
+  text-align: right;
+}
+
+.status-meter-track {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(211, 228, 254, 0.18);
+  border-radius: 999px;
+  background: rgba(0, 8, 20, 0.8);
+}
+
+.status-meter-track i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 120ms linear;
+}
+
+.status-meter.hp i {
+  background: linear-gradient(90deg, #a91f36, #ff6d62);
+}
+
+.status-meter.xp i {
+  background: linear-gradient(90deg, #176eb2, #79d0ff);
+}
+
+.skill-counter {
+  min-height: 72px;
+  padding: 14px;
+  border: 2px solid rgba(211, 228, 254, 0.16);
+  border-radius: 8px;
+  background: #020305;
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.94);
+}
+
+.skill-counter strong {
+  min-width: 76px;
+  color: #f2ca50;
+  font-size: 25px;
+}
+
+.skill-counter.cooldown strong {
+  color: #ffffff;
+  font-size: 38px;
+}
+
+.skill-counter.ready {
+  border-color: #f2ca50;
+  animation: skill-ready-pulse 0.72s steps(2, end) infinite;
+}
+
+@keyframes skill-ready-pulse {
+  0%, 100% {
+    background: #020305;
+    box-shadow: 0 0 6px rgba(242, 202, 80, 0.25), inset 0 0 24px rgba(0, 0, 0, 0.94);
+    opacity: 1;
+  }
+  50% {
+    background: #191300;
+    box-shadow: 0 0 22px rgba(242, 202, 80, 0.82), inset 0 0 18px rgba(242, 202, 80, 0.12);
+    opacity: 0.68;
+  }
 }
 
 @media (max-width: 1180px) {
@@ -431,6 +558,10 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     max-height: none;
     grid-column: 1 / -1;
+  }
+
+  .equipment-dock .equipment-slots {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .app-nav {
@@ -466,6 +597,19 @@ h1 {
   }
 
   .panel {
+    grid-template-columns: 1fr;
+  }
+
+  .equipment-dock .equipment-slots {
+    grid-template-columns: 1fr;
+  }
+
+  .equipment-dock-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .below-game-panels {
     grid-template-columns: 1fr;
   }
 
