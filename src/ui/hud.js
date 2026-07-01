@@ -82,7 +82,13 @@
     }
     setGameText(scene.roomLabel, scene.getStageWorldLabel());
 
-    refreshStatsPanel(config, state, effectiveAttackSpeed, classLabel);
+    refreshStatsPanel(
+      config,
+      state,
+      effectiveAttackSpeed,
+      classLabel,
+      scene.getSupremeEquipmentProgress()
+    );
     refreshExternalPlayerStatus(scene, state, hpRatio, xpRatio);
   }
 
@@ -139,7 +145,7 @@
     return Number.isInteger(value) ? `${value}` : value.toFixed(2);
   }
 
-  function refreshStatsPanel(config, state, effectiveAttackSpeed, classLabel) {
+  function refreshStatsPanel(config, state, effectiveAttackSpeed, classLabel, supremeEquipmentProgress) {
     // 캔버스 HUD 외에 HTML 패널에도 같은 값을 동기화한다.
     setPanelText("stat-class", classLabel);
     setPanelText("character-class", classLabel);
@@ -151,7 +157,11 @@
     setPanelText("stat-dexterity", formatStat(state.dexterity));
     setPanelText("stat-knowledge", formatStat(state.knowledge));
     setPanelText("stat-defense", formatStat(state.defense));
-    setPanelText("stat-awakening", state.isAwakened ? "각성 완료" : "미각성");
+    const supremeEffectCount = Math.round(supremeEquipmentProgress * 4);
+    setPanelText(
+      "stat-awakening",
+      `${state.isAwakened ? "각성 완료" : "미각성"} · 권능 ${supremeEffectCount}/4`
+    );
   }
 
   function setPanelText(id, value) {

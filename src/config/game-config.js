@@ -38,6 +38,7 @@
           knowledgeMultiplier: 2,
           monsterHpDamagePercentPerStrength: 0.00002,
           maxMonsterHpDamageRatio: 0.002,
+          supremeSetMaxMonsterHpDamageRatio: 0.01,
           minimumAttackCooldown: 90,
           maximumAttackRange: 220,
           bleedingFeedbackCooldown: 100,
@@ -110,6 +111,10 @@
       bossXpMultiplier: 4,
       skillCooldown: 5000,
       skillRadius: 180,
+      // CTRL 공격 스킬은 초반 성장감을 유지하고 10레벨 이후 지수 성장을 완화한다.
+      skillDamageGrowthPerLevel: 1.42,
+      skillDamageGrowthSoftCapLevel: 10,
+      skillDamageGrowthAfterSoftCap: 1.12,
       monsterLevelPerStage: 2,
       monsterHpMultiplierPerStage: 0.35,
       monsterDamageMultiplierPerStage: 0.2,
@@ -157,6 +162,7 @@
       bossProjectileDamageMultiplier: 1.7,
       bossScale: 1.8,
       awakened: {
+        // 각성 직후 난이도. 4대 최강 보스 권능을 모을수록 supremeSet 수치까지 완화된다.
         hpMultiplier: 400,
         defenseMultiplier: 5,
         damageMultiplier: 8,
@@ -164,6 +170,14 @@
         bossProjectileMaxHpDamageRatio: 0.08,
         speedMultiplier: 1.2,
         scaleMultiplier: 1.15,
+        supremeSet: {
+          hpMultiplier: 80,
+          defenseMultiplier: 2,
+          damageMultiplier: 3,
+          projectileMaxHpDamageRatio: 0.002,
+          bossProjectileMaxHpDamageRatio: 0.01,
+          speedMultiplier: 1.05,
+        },
       },
     },
     progression: {

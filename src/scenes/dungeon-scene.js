@@ -572,6 +572,35 @@
       return 1 + Math.max(0, this.stageNumber - 1) * perStageIncrease;
     }
 
+    getSupremeEquipmentProgress() {
+      const supremeEffects = ["infernoWeapon", "tidalHelmet", "titanArmor", "tempestShoes"];
+      const activeEffectCount = supremeEffects.filter(
+        (effect) => this.activeLegendaryEffects[effect]
+      ).length;
+      return activeEffectCount / supremeEffects.length;
+    }
+
+    getAwakenedMonsterStats() {
+      const awakened = config.monsters.awakened;
+      const progress = this.getSupremeEquipmentProgress();
+      const interpolate = (start, end) => start + (end - start) * progress;
+      return {
+        hpMultiplier: interpolate(awakened.hpMultiplier, awakened.supremeSet.hpMultiplier),
+        defenseMultiplier: interpolate(awakened.defenseMultiplier, awakened.supremeSet.defenseMultiplier),
+        damageMultiplier: interpolate(awakened.damageMultiplier, awakened.supremeSet.damageMultiplier),
+        projectileMaxHpDamageRatio: interpolate(
+          awakened.projectileMaxHpDamageRatio,
+          awakened.supremeSet.projectileMaxHpDamageRatio
+        ),
+        bossProjectileMaxHpDamageRatio: interpolate(
+          awakened.bossProjectileMaxHpDamageRatio,
+          awakened.supremeSet.bossProjectileMaxHpDamageRatio
+        ),
+        speedMultiplier: interpolate(awakened.speedMultiplier, awakened.supremeSet.speedMultiplier),
+        scaleMultiplier: awakened.scaleMultiplier,
+      };
+    }
+
     getStageMinimumMonsterLevel() {
       return config.room.minMonsterLevel + (this.stageNumber - 1) * config.stage.monsterLevelPerStage;
     }
@@ -919,7 +948,7 @@
       const spawnX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * distance, 100, config.world.width - 100);
       const spawnY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * distance, 100, config.world.height - 100);
       const monsterLevel = leveling.getMonsterLevel(this.playerState.level, this.getStageMinimumMonsterLevel());
-      const awakenedStats = config.monsters.awakened;
+      const awakenedStats = this.getAwakenedMonsterStats();
       const awakeningHpMultiplier = this.playerState.isAwakened ? awakenedStats.hpMultiplier : 1;
       const monsterMaxHp = Math.round(
         leveling.getMonsterMaxHp(monsterLevel) *
@@ -1539,7 +1568,7 @@
       const bossLevel = Math.max(this.getStageMinimumMonsterLevel(), this.playerState.level + 2);
       const bossProfile = this.getBossProfile(bossLevel);
       const bossBaseHp = leveling.getMonsterMaxHp(bossLevel);
-      const awakenedStats = config.monsters.awakened;
+      const awakenedStats = this.getAwakenedMonsterStats();
       const awakeningHpMultiplier = this.playerState.isAwakened ? awakenedStats.hpMultiplier : 1;
       const milestoneHpMultiplier = this.isMilestoneBossStage()
         ? config.stage.milestoneBossHpMultiplier
@@ -1903,7 +1932,7 @@
       const projectile = this.physics.add.image(monster.x, monster.y - 4, "enemy-shot");
       const isBoss = monster.getData("isBoss");
       const stageDamageMultiplier = this.getStageScale(config.stage.monsterDamageMultiplierPerStage);
-      const awakenedStats = config.monsters.awakened;
+      const awakenedStats = this.getAwakenedMonsterStats();
       const awakeningDamageMultiplier = this.playerState.isAwakened ? awakenedStats.damageMultiplier : 1;
       const milestoneDamageMultiplier = isBoss && this.isMilestoneBossStage()
         ? config.stage.milestoneBossDamageMultiplier
@@ -2074,8 +2103,12 @@
 
     handleAwakenedBasicAttack(target) {
       const awakening = config.player.promotion.awakening;
+      const supremeEquipmentProgress = this.getSupremeEquipmentProgress();
+      const maxHpDamageRatio = awakening.maxMonsterHpDamageRatio +
+        (awakening.supremeSetMaxMonsterHpDamageRatio - awakening.maxMonsterHpDamageRatio) *
+          supremeEquipmentProgress;
       const hpRatio = Math.min(
-        awakening.maxMonsterHpDamageRatio,
+        maxHpDamageRatio,
         this.playerState.strength * awakening.monsterHpDamagePercentPerStrength / 100
       );
       const proportionalDamage = target.getData("maxHp") * hpRatio;
@@ -2230,9 +2263,21 @@
         return;
       }
 
+      const skillGrowthLevel = this.playerState.level + 1;
+      const earlySkillGrowthLevels = Math.min(
+        skillGrowthLevel,
+        config.stage.skillDamageGrowthSoftCapLevel
+      );
+      const lateSkillGrowthLevels = Math.max(
+        0,
+        skillGrowthLevel - config.stage.skillDamageGrowthSoftCapLevel
+      );
+      const skillDamageGrowth =
+        Math.pow(config.stage.skillDamageGrowthPerLevel, earlySkillGrowthLevels) *
+        Math.pow(config.stage.skillDamageGrowthAfterSoftCap, lateSkillGrowthLevels);
       const skillDamage = Math.round(
         (this.playerState.damage + this.playerState.magicDamage + this.playerState.strength * 4) *
-          Math.pow(1.42, this.playerState.level + 1) *
+          skillDamageGrowth *
           skillProfile.multiplier
       );
 

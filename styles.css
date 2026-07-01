@@ -280,6 +280,16 @@ h1 {
   min-width: 0;
 }
 
+.panel-equipment .equipment-dock-header {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-equipment .equipment-slots {
+  grid-template-columns: 1fr;
+}
+
 .below-game-status {
   width: 100%;
 }
